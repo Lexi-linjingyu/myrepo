@@ -27,7 +27,7 @@ data <- dfdata[-1,]
 plot(data$X790,ylim=c(0,100))
 
 
-##merge climate data##
+##merge climate data of global weather data##
 library(data.table)
 setwd("D:/Jinzhu/linjingy/")
 path <- "D:/Jinzhu/linjingy/"
