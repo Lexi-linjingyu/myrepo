@@ -1,3 +1,4 @@
+##read data##
 library(plyr)
 library(ggmap)
 library(sp)
@@ -15,7 +16,8 @@ coordinates(lalo_df) <- ~ Longitude + Latitude
 proj4string(lalo_df) <- CRS("+init=epsg:4326")
 mapview(lalo_df)
 
-##check climate data 
+
+##check climate data##
 library(data.table)
 list <- list.files(pattern = '^p')
 data_list <- lapply(list,fread)
@@ -23,4 +25,14 @@ df_data <- data.frame(matrix(unlist(data_list),nrow = length(data_list),byrow = 
 dfdata <- data.frame(t(df_data))
 data <- dfdata[-1,]
 plot(data$X790,ylim=c(0,100))
+
+
+##merge climate data##
+library(data.table)
+setwd("D:/Jinzhu/linjingy/")
+path <- "D:/Jinzhu/linjingy/"
+list <- list.files(path, pattern = "^p", full.names = TRUE)
+pcp <- lapply(list, fread)
+pcp_all <- dplyr::bind_rows(pcp)
+write.table(pcp_all,file = "pcp_all.txt",sep = ",", quote = FALSE,row.names = FALSE)
 
