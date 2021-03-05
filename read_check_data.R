@@ -31,8 +31,12 @@ plot(data$X790,ylim=c(0,100))
 library(data.table)
 setwd("D:/Jinzhu/linjingy/")
 path <- "D:/Jinzhu/linjingy/"
-list <- list.files(path, pattern = "^p", full.names = TRUE)
-pcp <- lapply(list, fread)
-pcp_all <- dplyr::bind_rows(pcp)
-write.table(pcp_all,file = "pcp_all.txt",sep = ",", quote = FALSE,row.names = FALSE)
+list <- list.files(path, pattern = "^t", full.names = TRUE)
+tmp <- lapply(list, fread)
+tmp_all <- dplyr::bind_rows(tmp)
+as.numer
+write.table(pcp_all,file = "tmp_all.txt",sep = ",", quote = FALSE,row.names = FALSE)
+
+##read MySQL database##
+
 
