@@ -53,12 +53,12 @@ plot(data$X790,ylim=c(0,100))
 library(data.table)
 setwd("D:/Jinzhu/linjingy/")
 path <- "D:/Jinzhu/linjingy/"
-list <- list.files(path, pattern = "^p", full.names = TRUE)
+list <- list.files(path, pattern = "^t", full.names = TRUE)
 tmp <- lapply(list, fread) 
 tmp_1 <- dplyr::bind_rows(tmp)
 first_col <- as.numeric(as.factor(tmp_1[['ID']]))
-tmp_all <- transform(tmp_1,'ID'=c(1:4064))
-write.table(tmp_all,file = "pcp_all.txt",sep = ",", quote = FALSE,row.names = FALSE)
+tmp_all <- transform(tmp_1,'ID'=c(1:4896))
+write.table(tmp_all,file = "tmp_all.txt",sep = ",", quote = FALSE,row.names = FALSE)
 
 ##select streamflow data##
 library(dplyr)
