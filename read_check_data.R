@@ -70,3 +70,8 @@ stfl_35 <- streamflow %>%
   select(date,discharge)
 write.csv(stfl_35,"q_obs_35.csv",row.names = FALSE)
 
+##
+path <- "C:/Users/linjingy/Downloads/precipitation_0019/precipitation_0019/county_daily.csv"
+prec <- readr::read_csv(path)
+  
+  
