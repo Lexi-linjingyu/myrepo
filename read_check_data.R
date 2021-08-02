@@ -1,10 +1,5 @@
-##read data##
-library(plyr)
-library(ggmap)
-library(sp)
-library(mapview)
-
-##data cleaning##================================================================================================================
+####=======================####
+####  1.longitude/lat       ####
 list <- list.files("E:/Lexi/data_paper3/data for SWAT/data1", pattern="\\.csv$",full.names = TRUE)
 data <- lapply(list, read_csv)
 lalo <- lapply(data, function(x) x%>% select(Longitude, Latitude))
@@ -14,9 +9,7 @@ write_delim(lalo_df,file = "lalo_df1.xls")
 coordinates(lalo_df) <- ~ Longitude + Latitude
 proj4string(lalo_df) <- CRS("+init=epsg:4326")
 mapview(lalo_df)
-
-
-##read NC data##================================================================================================================
+####  2.NC data     ####
 library(ncdf4)
 library(raster)
 library(rasterVis)
@@ -37,19 +30,7 @@ c_cn_runf <- as.data.frame(combine_cn_runf)
 df_cn_runf <- data.frame(t(c_cn_runf[,-1]))
 colnames(df_cn_runf) <- df_cn_runf[, 1]
 write.csv(df_runoff, file = "china_runoff_2015.csv")
-
-
-##check climate data##=====================================================================================================
-library(data.table)
-list <- list.files(pattern = '^p')
-data_list <- lapply(list,fread)
-df_data <- data.frame(matrix(unlist(data_list),nrow = length(data_list),byrow = TRUE))
-dfdata <- data.frame(t(df_data))
-data <- dfdata[-1,]
-plot(data$X790,ylim=c(0,100))
-
-
-##merge climate data of global weather data including pcp and tmp##========================================================
+####  3.merge climate data of global weather data including pcp and tmp##========================================================
 library(data.table)
 setwd("D:/Jinzhu/linjingy/")
 path <- "D:/Jinzhu/linjingy/"
@@ -60,7 +41,8 @@ first_col <- as.numeric(as.factor(tmp_1[['ID']]))
 tmp_all <- transform(tmp_1,'ID'=c(1:4896))
 write.table(tmp_all,file = "tmp_all.txt",sep = ",", quote = FALSE,row.names = FALSE)
 
-##select streamflow data##=================================================================================================
+
+####  4. select streamflow data ####
 library(dplyr)
 path <- "H:/Documents/paper3_water_china/runoff_china/database/data_table.xlsx"
 streamflow <- readxl::read_xlsx(path)
@@ -69,54 +51,7 @@ stfl_35 <- streamflow %>%
   mutate(date = as.Date(paste(year,month,day,sep="-"))) %>%
   select(date,discharge)
 write.csv(stfl_35,"q_obs_35.csv",row.names = FALSE)
-
-##===================================================================================================================
-library(dplyr)
-path <- "E:/Lexi/data_paper3/prec_0019/county_daily.csv"
-path_2 <- "E:/Lexi/data_paper3/prec_0019/lon_lat.txt"
-prec <- readr::read_csv(path)
-colnames(prec)[6] <- 'FIRST_2'
-lon <- readr::read_delim(path_2,delim = ",")  
-study <- lon %>% 
-  filter(26<lat & lat< 35) %>%
-  filter(96<lon & lon< 103) 
-study_yalong <- inner_join(prec,study,by = "FIRST_2")
-ID <- data.frame(ID = c(1:86))
-colnames(study_yalong)[5] <- 'NAME'
-colnames(study_yalong)[7] <- 'DATE'
-colnames(study_yalong)[8] <- 'PRECI'
-study_yalong$PREC <- formattable::digits(study_yalong$PREC,3)
-lat <- data.frame(LAT = c(unique(study_yalong[15])))
-long <- data.frame(LON = c(unique(study_yalong[16])))
-name <- data.frame(NAME = c(unique(study_yalong[5])))
-pcp <- cbind(ID,name,lat,long)
-
-group <- study_yalong %>% 
-  group_by(NAME)%>%
-  mutate(PREC=PRECI*10)%>%
-  select(NAME,DATE,PREC)
-list_ya = split(group,group$NAME)
-
-filename <- unique(group$NAME)
-txtfile = paste(filename,".txt",sep = "") 
-
-nam <- list()
-for (i in 1:86) {
-  nam[[i]] <- paste("E:/Lexi/data_paper3/prec_0019/prec/",txtfile[i],sep="")
-  write.table(list_ya[[i]][[3]],nam[[i]],row.names =FALSE,col.names = 20000101,quote = FALSE)
-}
-
-write.table(pcp_0009,"pcp_0009.txt",row.names = FALSE,quote=FALSE,sep=",")
-
-##===================================================================##
-library(dplyr)
-xl_prec <- read.csv("H:/SWAT/SWAT_China/yalong_river/xinlong.csv") %>%
-  select(date,prec,tempmax,tempmin) %>%
-  filter(!is.na(prec),!is.na(tempmax),!is.na(tempmin))
-write.csv(xl_prec,"H:/SWAT/SWAT_China/yalong_river/xl_prec.csv")
-
-
-##=========read gauge-based data================================================================
+####  5.read weather gauge-based data   ####
 library(data.table)
 library(readr)
 library(dplyr)
@@ -130,32 +65,510 @@ dir.create(new_dir, recursive = TRUE)
 for(file in files) {
   file.copy(file, new_dir)
 }
+##=========precipitation
 num <- c('13011','12030','12001','13003','11002')
 path1 <- "E:/Lexi/data_paper3/weather/gauge-based weather data China (1960-2020)/data/data_elements"
 setwd(path1)
 mylist <- list.files(path1,pattern='13011')
-pre_list <- lapply(mylist,fread)
+pre_list <- lapply(mylist,function(x) {
+  read.table(x,fill = TRUE)
+})
 all_pre_list <- bind_rows(pre_list)
-colnames(all_pre_list)[c(1,5,6,7,10)] <- c('st_id','year','month','day','pre')
+#remove some errors values
+all_pre_list_f <- all_pre_list %>%
+  filter(V10>40000)%>%
+  mutate(pcp=V10)%>%
+  mutate(pcp=ifelse(V10<200000000,trunc(V10/100000),pcp))%>%
+  mutate(pcp=ifelse(V10>200000000,trunc(V10/10000000000),pcp))%>%
+  mutate(V10=pcp)%>%
+  select(-pcp)
+all_pre_list <- all_pre_list[!(all_pre_list$V10>40000),]
+all_pre_list <- rbind(all_pre_list,all_pre_list_f)
+#data clean
+colnames(all_pre_list)[c(1,2,3,4,5,6,7,10)] <- c('st_id','LAT','LONG','ELEVATION','year','month','day','pre')
+info <- all_pre_list %>% 
+  select('st_id','LAT','LONG','ELEVATION')%>%
+  rename(NAME=st_id)%>%
+  mutate(LAT=LAT/100)%>%
+  mutate(LONG=LONG/100)%>%
+  mutate(ELEVATION=ELEVATION/10,ELEVATION)%>%
+  mutate(ELEVATION=ifelse(ELEVATION > 10000,ELEVATION-10000,ELEVATION))
+info <- info[!duplicated(info$NAME),] %>%
+  mutate(ID = 1:840) %>%
+  relocate(ID,NAME,LAT,LONG,ELEVATION)
+info$NAME <- sub("^","pcp",info$NAME)
+write.table(info,"info_all_station.txt",quote=FALSE,sep = ",",row.names = FALSE)
 pre <- all_pre_list %>% 
   select('st_id','year','month','day','pre') %>%
+  filter(year >= 1960) %>%
   mutate(pcp=pre) %>%
+  mutate(pcp=ifelse(pre < 30000,pre/10,pcp))%>%
   mutate(pcp=ifelse(pre>30000 & pre < 34000 & pre != 32700 & pre !=32766, pre%%1000/10,pcp)) %>%
   mutate(pcp=ifelse(pre==32700,pre*0,pcp))%>%
   mutate(pcp=ifelse(pre==32766,pre*0-99,pcp))%>%
-  mutate(pcp=ifelse(pre < 30000,pre/10,pcp))%>%
-  mutate(pcp=round(pcp,3))%>%
-  mutate(date= make_date(year,month,day))%>%
+  mutate(pcp=sprintf("%0.3f", pcp))%>%
+  mutate(date=make_date(year,month,day))%>%
   select('st_id','date','pcp')
 
-list_pre <- split(pre,pre$st_id)
-pre_filename <- unique(pre$st_id)
+pre$date <- gsub('-','',pre$date,perl = TRUE)
+date_start<-ymd(pre$date[1])
+date_end<-ymd("2019-12-31")
+complete_date<-date_start+days(0:as.numeric(date_end-date_start))
+
+df2<-data.frame(date=complete_date,pcp_1=-99)
+df2 <- df2%>%
+  mutate(pcp_1=sprintf("%0.3f", pcp_1))
+df2$date <- gsub('-','',df2$date, perl = TRUE)
+n <- 840
+df2_all <- do.call("rbind", replicate(n, df2, simplify = FALSE))
+df2_all <- df2_all %>% 
+  group_by(date)%>%
+  mutate (st_id = pre_filename)
+pre_df <- full_join(pre,df2_all)
+pre_df <- pre_df %>%
+  mutate(pcp_2=ifelse(is.na(pcp),pcp_1,pcp))%>%
+  mutate(pcp=pcp_2)%>%
+  select(-pcp_1)%>%
+  select(-pcp_2)%>%
+  arrange(st_id,date)
+pre_df <- pre_df[!duplicated(pre_df[,1:2]),] 
+# names(list_df)<- paste0(unique(pre$st_id))
+list_pre <- split(pre_df,pre_df$st_id)
+pre_filename <- sort(unique(pre$st_id))
 txtfile <- paste('pcp',pre_filename,".txt",sep = "") 
 nam <- list()
 for (i in 1:length(unique(pre$st_id))) {
-    nam[[i]] <- paste("E:/Lexi/data_paper3/weather/gauge-based weather data China (1960-2020)/swat_weather/pcp/",txtfile[i],sep="")
-    write.table(list_pre[[i]][[3]],nam[[i]],row.names =FALSE,col.names = list_pre[[i]][[2]][1],quote = FALSE)
+  nam[[i]] <- paste("E:/Lexi/data_paper3/weather/gauge-based weather data China (1960-2020)/swat_weather/pcp/",txtfile[i],sep="")
+  write.table(list_pre[[i]][[3]],nam[[i]],row.names =FALSE,col.names = list_pre[[i]][[2]][1],quote = FALSE)
 }
+##=========temperature
+mylist <- list.files(path1,pattern='12001')
+tem_list <- lapply(mylist,function(x) {
+  read.table(x,fill = TRUE)
+})
+all_tem_list <- bind_rows(tem_list)
+all_tem_list_f <- all_tem_list %>%
+  filter(V10>40000)%>%
+  mutate(tmp=V10)%>%
+  mutate(tmp=ifelse(V10>=32766327663276632766,trunc(V10/1000000000000000),tmp))%>%
+  mutate(V10=tmp)%>%
+  select(-tmp)
+all_tem_list <- all_tem_list[!(all_tem_list$V10>40000),]
+all_tem_list <- rbind(all_tem_list,all_tem_list_f)
+colnames(all_tem_list)[c(1,2,3,4,5,6,7,9,10)] <- c('st_id','LAT','LONG','ELEVATION','year','month','day','max','min')
+info <- all_tem_list %>% 
+  select('st_id','LAT','LONG','ELEVATION')%>%
+  rename(NAME=st_id)%>%
+  mutate(LAT=LAT/100)%>%
+  mutate(LONG=LONG/100)%>%
+  mutate(ELEVATION=ELEVATION/10,ELEVATION)%>%
+  mutate(ELEVATION=ifelse(ELEVATION > 10000,ELEVATION-10000,ELEVATION))
+info <- info[!duplicated(info$NAME),]%>%
+  mutate(ID = 1:840) %>%
+  relocate(ID,NAME,LAT,LONG,ELEVATION)
+info$NAME <- sub("^","tmp",info$NAME)
+write.table(info,"info_all_tem.txt",quote=FALSE,sep = ",",row.names = FALSE)
+tem <- all_tem_list %>% 
+  select('st_id','year','month','day','max','min') %>%
+  filter(year >= 1960) %>%
+  mutate(max=ifelse(max < 30000,max/10,max))%>%
+  mutate(min=ifelse(min < 30000,min/10,min))%>%
+  mutate(max=ifelse(max>30000 & max < 34000 & max != 32700 & max !=32766, max%%1000/10,max)) %>%
+  mutate(min=ifelse(min>30000 & min < 34000 & min != 32700 & min !=32766, min%%1000/10,min)) %>%
+  mutate(max=ifelse(max==32700,max*0,max))%>%
+  mutate(min=ifelse(min==32700,min*0,min))%>%
+  mutate(max=ifelse(max==32766,max*0-99,max))%>%
+  mutate(min=ifelse(min==32766,min*0-99,min))%>%
+  mutate(date=make_date(year,month,day))%>%
+  mutate(max = sprintf("%0.3f", max))%>%
+  mutate(min = sprintf("%0.3f", min))%>% 
+  mutate(tem = paste(max,min,sep = ","))%>% 
+  select('st_id','date','tem')
+tem$date <- gsub('-','',tem$date,perl = TRUE)
+df_tem<-data.frame(date=complete_date,tem_1=-99)
+df_tem <- df_tem %>%
+  mutate(tem_1=sprintf("%0.3f", tem_1))
+df_tem <- df_tem %>%
+  mutate(tem2=paste(tem_1,tem_1,sep = ","))%>%
+  select(-tem_1)
+df_tem$date <- gsub('-','',df_tem$date, perl = TRUE)
+n <- 840
+df_tem_all <- do.call("rbind", replicate(n, df_tem, simplify = FALSE))
+df_tem_all <- df_tem_all %>% 
+  group_by(date)%>%
+  mutate (st_id = pre_filename)
+tem_df <- full_join(tem,df_tem_all)
+tem_df <- tem_df %>%
+  mutate(tem_3=ifelse(is.na(tem),tem2,tem))%>%
+  mutate(tem=tem_3)%>%
+  select(-tem2)%>%
+  select(-tem_3)%>%
+  arrange(st_id,date)
+tem_df <- tem_df[!duplicated(tem_df[,c('st_id','date')]),]
+list_tem <- split(tem_df,tem_df$st_id)
+tem_filename <- sort(unique(tem$st_id))
+txtfile <- paste('tem',tem_filename,".txt",sep = "") 
+nam <- list()
+for (i in 1:length(unique(tem$st_id))) {
+  nam[[i]] <- paste("E:/Lexi/data_paper3/weather/gauge-based weather data China (1960-2020)/swat_weather/tem/",txtfile[i],sep="")
+  write.table(list_tem[[i]][[3]],nam[[i]],row.names =FALSE,col.names = list_tem[[i]][[2]][1],quote = FALSE)
+}
+##==========wind
+num <- c('13011','12030','12001','13003','11002')
+path1 <- "E:/Lexi/data_paper3/weather/gauge-based weather data China (1960-2020)/data/data_elements"
+setwd(path1)
+mylist <- list.files(path1,pattern='11002')
+win_list <- lapply(mylist,function(x) {
+  read.table(x,fill = TRUE)
+})
+all_win_list <- bind_rows(win_list)
+#data clean
+colnames(all_win_list)[c(1,2,3,4,5,6,7,8)] <- c('st_id','LAT','LONG','ELEVATION','year','month','day','win')
+info <- all_win_list %>% 
+  select('st_id','LAT','LONG','ELEVATION')%>%
+  rename(NAME=st_id)%>%
+  mutate(LAT=LAT/100)%>%
+  mutate(LONG=LONG/100)%>%
+  mutate(ELEVATION=ELEVATION/10,ELEVATION)%>%
+  mutate(ELEVATION=ifelse(ELEVATION > 10000,ELEVATION-10000,ELEVATION))
+info <- info[!duplicated(info$NAME),] %>%
+  mutate(ID = 1:840) %>%
+  relocate(ID,NAME,LAT,LONG,ELEVATION)
+info$NAME <- sub("^","pcp",info$NAME)
+write.table(info,"info_all_station.txt",quote=FALSE,sep = ",",row.names = FALSE)
 
-###============================================================
+win <- all_win_list %>% 
+  select('st_id','year','month','day','win') %>%
+  filter(year >= 1960) %>%
+  mutate(win=ifelse(win < 30000,win/10,win))%>%
+  mutate(win=ifelse(win==32766,win*0-99,win))%>%
+  mutate(win_2=sprintf("%0.3f", win))%>%
+  mutate(win=win_2)%>%
+  mutate(date=make_date(year,month,day))%>%
+  select('st_id','date','win')
+
+win$date <- gsub('-','',win$date,perl = TRUE)
+win_df <- full_join(win,df2_all)
+win_df <- win_df %>%
+  mutate(win_2=ifelse(is.na(win),pcp_1,win))%>%
+  mutate(win=win_2)%>%
+  select(-pcp_1)%>%
+  select(-win_2)%>%
+  arrange(st_id,date)
+win_df <- win_df[!duplicated(win_df[,c('st_id','date')]),] 
+# names(list_df)<- paste0(unique(win$st_id))
+list_win <- split(win_df,win_df$st_id)
+win_filename <- sort(unique(win$st_id))
+txtfile <- paste('win',win_filename,".txt",sep = "") 
+nam <- list()
+for (i in 1:length(unique(win$st_id))) {
+  nam[[i]] <- paste("E:/Lexi/data_paper3/weather/gauge-based weather data China (1960-2020)/swat_weather/win/",txtfile[i],sep="")
+  write.table(list_win[[i]][[3]],nam[[i]],row.names =FALSE,col.names = list_win[[i]][[2]][1],quote = FALSE)
+}
+##====================rh
+mylist <- list.files(path1,pattern='13003')
+rh_list <- lapply(mylist,function(x) {
+  read.table(x,fill = TRUE)
+})
+all_rh_list <- bind_rows(rh_list)
+#data clean
+colnames(all_rh_list)[c(1,2,3,4,5,6,7,8)] <- c('st_id','LAT','LONG','ELEVATION','year','month','day','rh')
+##make the station file
+info <- all_rh_list %>% 
+  select('st_id','LAT','LONG','ELEVATION')%>%
+  rename(NAME=st_id)%>%
+  mutate(LAT=LAT/100)%>%
+  mutate(LONG=LONG/100)%>%
+  mutate(ELEVATION=ELEVATION/10,ELEVATION)%>%
+  mutate(ELEVATION=ifelse(ELEVATION > 10000,ELEVATION-10000,ELEVATION))
+info <- info[!duplicated(info$NAME),] %>%
+  mutate(ID = 1:840) %>%
+  relocate(ID,NAME,LAT,LONG,ELEVATION)
+info$NAME <- sub("^","pcp",info$NAME)
+write.table(info,"info_all_station.txt",quote=FALSE,sep = ",",row.names = FALSE)
+##data clean
+rh <- all_rh_list %>% 
+  select('st_id','year','month','day','rh') %>%
+  filter(year >= 1960) %>%
+  mutate(rh=ifelse(rh==32766,rh*0-99,rh))%>%
+  mutate(rh=sprintf("%0.3f", rh))%>%
+  mutate(date=make_date(year,month,day))%>%
+  select('st_id','date','rh')
+rh$date <- gsub('-','',rh$date,perl = TRUE)
+rh_df <- full_join(rh,df2_all)
+rh_df <- rh_df %>%
+  mutate(win_2=ifelse(is.na(rh),pcp_1,rh))%>%
+  mutate(rh=win_2)%>%
+  select(-pcp_1)%>%
+  select(-win_2)%>%
+  arrange(st_id,date)
+rh_df <- rh_df[!duplicated(rh_df[,c('st_id','date')]),] 
+# names(list_df)<- paste0(unique(rh$st_id))
+list_rh <- split(rh_df,rh_df$st_id)
+rh_filename <- sort(unique(rh$st_id))
+txtfile <- paste('rh',rh_filename,".txt",sep = "") 
+nam <- list()
+for (i in 1:length(unique(rh$st_id))) {
+  nam[[i]] <- paste("E:/Lexi/data_paper3/weather/gauge-based weather data China (1960-2020)/swat_weather/rh/",txtfile[i],sep="")
+  write.table(list_rh[[i]][[3]],nam[[i]],row.names =FALSE,col.names = list_rh[[i]][[2]][1],quote = FALSE)
+}
+##============evaporation
+path1 <- "E:/Lexi/data_paper3/weather/gauge-based weather data China (1960-2020)/data/data_elements"
+setwd(path1)
+mylist1 <- list.files(path1,pattern='13240')
+evp_list <- lapply(mylist1,function(x) {
+  read.table(x,fill = TRUE,row.names=NULL)
+})
+all_evp_list <- bind_rows(evp_list)
+#data clean
+colnames(all_evp_list)[c(1,2,3,4,5,6,7,8)] <- c('st_id','LAT','LONG','ELEVATION','year','month','day','evp')
+info <- all_evp_list %>% 
+  select('st_id','LAT','LONG','ELEVATION')%>%
+  rename(NAME=st_id)%>%
+  mutate(LAT=LAT/100)%>%
+  mutate(LONG=LONG/100)%>%
+  mutate(ELEVATION=ELEVATION/10,ELEVATION)%>%
+  mutate(ELEVATION=ifelse(ELEVATION > 10000,ELEVATION-10000,ELEVATION))
+info <- info[!duplicated(info$NAME),] %>%
+  mutate(ID = 1:840) %>%
+  relocate(ID,NAME,LAT,LONG,ELEVATION)
+info$NAME <- sub("^","pcp",info$NAME)
+write.table(info,"info_all_station.txt",quote=FALSE,sep = ",",row.names = FALSE)
+
+evp <- all_evp_list %>% 
+  select('st_id','LAT','LONG','year','month','day','evp') %>%
+  filter(year >= 1960) %>%
+  mutate(LAT=LAT/100) %>%
+  mutate(LONG=LONG/100) %>%
+  mutate(evp=ifelse(evp < 30000,evp/10,evp))%>%
+  mutate(evp=ifelse(evp==32766,evp*0-99,evp))%>%
+  mutate(evp_2=sprintf("%0.3f", evp))%>%
+  mutate(evp=evp_2)%>%
+  mutate(date=make_date(year,month,day))%>%
+  select('st_id','LAT','LONG','date','evp')
+evp_zy <- evp %>%
+  filter(date >= '2018-01-01') %>%
+  filter(LONG >= 117.00 & LONG <= 117.73)%>%
+  filter(LAT >= 24.17& LAT <= 25.03)
+  
+win$date <- gsub('-','',win$date,perl = TRUE)
+win_df <- full_join(win,df2_all)
+win_df <- win_df %>%
+  mutate(win_2=ifelse(is.na(win),pcp_1,win))%>%
+  mutate(win=win_2)%>%
+  select(-pcp_1)%>%
+  select(-win_2)%>%
+  arrange(st_id,date)
+win_df <- win_df[!duplicated(win_df[,c('st_id','date')]),] 
+# names(list_df)<- paste0(unique(win$st_id))
+list_win <- split(win_df,win_df$st_id)
+win_filename <- sort(unique(win$st_id))
+txtfile <- paste('win',win_filename,".txt",sep = "") 
+nam <- list()
+for (i in 1:length(unique(win$st_id))) {
+  nam[[i]] <- paste("E:/Lexi/data_paper3/weather/gauge-based weather data China (1960-2020)/swat_weather/win/",txtfile[i],sep="")
+  write.table(list_win[[i]][[3]],nam[[i]],row.names =FALSE,col.names = list_win[[i]][[2]][1],quote = FALSE)
+}
+####  6.matlab data          ####
+library(R.matlab)
+library(dplyr)
+data_20 <- readMat("Data20.mat")
+info <- data_20[["Data20"]][c(1,5,6,7,11,12,13,17,18,19,23,24,25,29,30,31,35,36,37,41,42,43,47,48,49,53,54,55,59,60,61,65,66,67,71,72,73,77,78,79,83,84,85,89,90,91,95,96,97,101,102,103,107,108,109,113,114,115,119,120)]
+rf <- data_20[["Data20"]][c(3,9,15,21,27,33,39,45,51,57,63,69,75,81,87,93,99,105,111,117)]
+df_info <- matrix(unlist(info),byrow=TRUE,ncol=3)
+df_2 <- as.data.frame(rf[[2]])
+colnames(df_2) <- c("year","mon","day","discharge","V5")
+df_2$date <- as.Date(with(df_2,paste(year,mon,day,sep="-")),"%Y-%m-%d")
+df_2 <- df_2 %>% 
+  select(date,discharge)
+write.csv(df_info,"Data2_info.csv")
+write.csv(df_2,"wu_river.csv",row.names = FALSE)
+####  7. web scraping  ######
+##/// down weekly report
+library(downloader)
+library(rvest)
+library(RSelenium)
+library(stringr)
+library(stringi)
+library(purrr)
+library(XML)
+url = c('http://www.cnemc.cn/sssj/szzdjczb/index_8.shtml')
+allsourcecode <- url %>% 
+  read_html(encoding = "UTF-8")%>% 
+  html_node("div[class=textcon_list]")
+IMUFE_link <- allsourcecode %>% 
+  html_nodes("a")%>%
+  html_attr("href")
+IMUFE_link <- str_replace(IMUFE_link,"./","/")
+site<-rep('http://www.cnemc.cn/sssj/szzdjczb',20)
+websites2<-paste(site,IMUFE_link,sep="")
+out <- vector("character", length = length(websites2))
+for(i in seq_along(websites2)){
+  derby <- read_html(websites2[i])
+  out[i] <- derby %>%
+    html_node("div[class=text]") %>%
+    html_node("div") %>%
+    html_node("a") %>%
+    html_attr("href")
+}
+##scraping website2
+date <- vector("character", length = length(websites2))
+for(i in seq_along(websites2)){
+  derby <- read_html(websites2[i])
+  date[i] <- derby %>%
+    html_node("div[class=text]") %>%
+    html_node("h5") %>%
+    html_text()
+}
+date2 <- stri_extract_first_regex(IMUFE_link, "\\d{6}")
+out <- str_replace(out,"./","/")
+site<-rep('http://www.cnemc.cn/sssj/szzdjczb/',20)
+out2<-paste(site,date2,out,sep="")
+
+##scraping name
+name <- vector("character", length = length(websites2))
+for(i in seq_along(websites2)){
+  derby <- read_html(websites2[i])
+  name[i] <- derby %>%
+    html_node("div[class=text]") %>%
+    html_node("h1") %>%
+    html_text()
+}
+##download files
+for (i in 1:length(out2)){
+  download.file(out2[[i]], destfile = paste(name[[i]],".doc"), method="auto")
+}
+##///scraping web water quality
+library(RCurl)
+library(XML)
+library(stringr)
+library(dplyr)
+library(Rwebdriver)
+start_session(root = 'http://localhost/wd/hub/',browser ="chrome")# ???????????????4444,??????????????????chorme,????????????????????????firefox
+list_url <-  "http://106.37.208.243:8068/GJZ/Business/Publish/Main.html?nsukey=izcwxfBd9wvE6xZJmS9DC%2BOo7fv7ybS8nnsrmgK4cyMrp54jCB0NEXQBVjHOqwFgPrUPw2B8TL6b2mQbPLe4HWhy0yPx80Vj1mmfXMC4nBUa3naLxIrNOvCXjHO4a25yILUSi%2Fu7K%2F2QrmjBVN1DaQ9k1056DUZQRdPPYtpWzEWXHPpeZoHNvcoDS0EtEC6HodxX7A34wVTWuAOGl5kh9w%3D%3D"
+post.url(url = list_url)# ????????????
+pageSource <- page_source()#??????????????????
+
+####  8. water quality data ####
+#/// read .docx data ///
+library(docxtractr)
+library(dplyr)
+path = "D:/jingyVM/linjingy/water quality"
+mypath = list.dirs(path, full.names = TRUE, recursive = TRUE)
+files = sort(unique(list.files(mypath,pattern = "\\.docx$", full.names = TRUE, recursive = TRUE)))
+name = sub(pattern = "(.*)\\...*$",replacement = "\\1",basename(files))
+name_fi <- gsub('_','',name, perl = TRUE)
+doc <- lapply(files,read_docx)
+doc1 <- "C:/desktop/doc1.docx"
+table1 = lapply(doc1,function(x){
+  docx_extract_all_tbls(x, guess_header = FALSE)
+})
+names(table) = paste0(name_fi)
+list.table = lapply(table, function(x){
+  dplyr::bind_rows(x,.id = "id")
+})
+df.table = bind_rows(list.table,.id="column_name")
+name_river = matrix(data=NA,nrow=20008,ncol=1)
+df2.table = cbind(df.table[1:20008,1:4],name_river,df.table[1:20008,5:ncol(df.table)])
+df2.table$V12 = NULL
+df.table = df.table[20008:60804,]
+nm = names(df2.table)
+names(df.table) = nm
+df3.table = rbind(df2.table,df.table)
+df3.table[df3.table== c("","-","-")] <- NA
+df3.table$V1[df3.table$V1==""]<-NA
+df4.table <- df3.table %>%
+  filter(!is.na(V1))
+df4.table[,9:11] <- lapply(
+    df4.table[,9:11], 
+    function(x)as.numeric(gsub("???", NA, x)))
+
+dftable <- df5.table%>%
+  mutate(s = V6+V7+V8-6)
+
+
+readr::write_excel_csv(df4.table,"water_quality.csv")
+water_quality <- read.csv("water_quality.csv",encoding = "UTF-8")
+d <- sort(unique(water_quality$V1))
+d <- d[10:158]
+d <- d[-3]
+water <- water_quality%>%
+  filter(V1 %in% d)
+colnames(water)[c(2,7,8,9,10,11,12)]<- c("date","river_name","basin_name","ph","do","cod","nh3")
+
+
+####  9. geocoding  #### 
+library(recharts)
+lat = map_location$lat
+lon = map_location$lon
+address = map_location$address
+df = data.frame(lat=lat,lon=lon)
+df2 <- convBD2WGS(df)
+df3 = cbind(df2,address)
+readr::write_excel_csv(df3,"wwtps.xls")
+
+####  10. write point source daily ####
+library(sf)
+point = foreign::read.dbf("point_select.dbf",as.is = TRUE)
+point_list = sort(point$POINTID[duplicated(point$POINTID)])
+point_list_r = unique(point[duplicated(point$POINTID),])
+point_inf = point_list_r[,c(13,23)]
+q_point = readxl::read_xlsx("H:/Documents/paper3_water_china/nitrogen sources/point sources.xlsx")
+q_point_info = q_point[,c(1,2,13)]
+colnames(q_point_info)[1:3] = c("NAME_2","YEAR","NH3")
+join = merge(point_inf,q_point_info,by="NAME_2")
+join2 = join[,2:4]
+
+module = readr::read_table2("3p.dat",col_names = FALSE,skip = 1)
+colnames(module)=module[1,]
+module = as.data.frame(module[-1,])
+
+join2[,2] = as.character(join2$YEAR)
+join2$NH3= format(as.numeric(join2$NH3),scientific = TRUE,digits = 11)
+join2$NH3 = gsub("e","E",join2$NH3)
+join_modu = left_join(module,join2,by="YEAR")
+join_modu2 = join_modu %>%
+  select(-NH3CNST)%>%
+  rename(NH3CNST=NH3)%>%
+  relocate(NH3CNST,.after = NO3CNST)
+list_modu = split(join_modu2[-which(names(join_modu2)=="Subbasin")],f=join_modu2$Subbasin)
+
+#write.table(module,quote=FALSE,row.names=FALSE)
+time = as.character(x= lubridate::now(),format='%m/%d/%Y %H:%M:%S')
+title = paste(time,"AM .dat file Daily Record Subbasin  10 ArcSWAT 2012.10_4.21 interface")
+max.print <- getOption('max.print')
+max.width <- getOption('width')
+options(width = 1000L)
+options(max.print=nrow(module)*ncol(module))
+point_name = sort(unique(join_modu2$Subbasin))
+txtname = paste(point_name,'p','.dat',sep="")
+subbasin = list()
+for (i in 1:length(list_modu)){
+  sink(txtname[i])
+  writeLines(title)
+  cat("\n\n\n\n")
+  print(list_modu[[i]],row.names = FALSE)
+  sink()
+  options(max.print = max.print)
+  options(width = 1000)
+}
+#
+library(topHRU)
+hru_table = extract_hru("D:/jingyVM/linjingy/min_river_sc/min_river_sc.mdb")
+cols = c("LANDUSE","SOIL","SLP","UNIQUECOMB")
+hru_table[cols]=lapply(hru_table[cols],factor)
+hru_eval = evaluate_hru(hru_table=hru_table,luse_thrs = c(0,20,1),weight = c(2, 1, 1))
+hru_eval$result_nondominated
+plot_pareto(hru_eval, area_thrs = 0.05, hru_thrs = 2000,
+            interactive = TRUE)
+
+#
+library(RODBC)
+con2 = odbcConnectAccess('D:/jingyVM/linjingy/min_river_sc/min_river_sc.mdb')
+sqltable = sqlTables(con2)
+hru = sqlFetch(con2,"hru")
+hru_90 = hru[,2:7]
+write.table(hru_90,"hru_lu_1990.txt",row.names = FALSE)
+odbcClose(con2)
+
 
