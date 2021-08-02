@@ -1,5 +1,4 @@
-####=======================####
-####  1.longitude/lat       ####
+####  1.Longitude/lat       ####
 list <- list.files("E:/Lexi/data_paper3/data for SWAT/data1", pattern="\\.csv$",full.names = TRUE)
 data <- lapply(list, read_csv)
 lalo <- lapply(data, function(x) x%>% select(Longitude, Latitude))
@@ -9,28 +8,8 @@ write_delim(lalo_df,file = "lalo_df1.xls")
 coordinates(lalo_df) <- ~ Longitude + Latitude
 proj4string(lalo_df) <- CRS("+init=epsg:4326")
 mapview(lalo_df)
-####  2.NC data     ####
-library(ncdf4)
-library(raster)
-library(rasterVis)
-library(snow)
 
-files <- list.files(pattern=".nc",full.names = TRUE)#read nc.file
-china_coordinate <- read.csv("E:/Lexi/data_paper3/china_shp/china_point.csv",header = TRUE, sep = ",",stringsAsFactors = FALSE)
-nc <- stack(files)
-brick1 <- lapply(files,brick,varname ="runoff")#extract subsurface and surface runoff
-runf <- stack(brick1)
-brick2 <- lapply(files,brick,varname ="Snowf_tavg")
-snowf <- stack(brick2)
-coordinates(china_coordinate) <- ~lon +lat # extract value from point coordinated
-cn_runf <- extract(runf, china_coordinate)
-cn_snowf <- extract(snowf, china_coordinate)
-combine_cn_runf <- cbind(china_coordinate,cn_runf)# China_runoff <- China_sur + China_sub
-c_cn_runf <- as.data.frame(combine_cn_runf)
-df_cn_runf <- data.frame(t(c_cn_runf[,-1]))
-colnames(df_cn_runf) <- df_cn_runf[, 1]
-write.csv(df_runoff, file = "china_runoff_2015.csv")
-####  3.merge climate data of global weather data including pcp and tmp##========================================================
+####  2.Merge climate data of global weather data including pcp and tmp##========================================================
 library(data.table)
 setwd("D:/Jinzhu/linjingy/")
 path <- "D:/Jinzhu/linjingy/"
@@ -42,7 +21,7 @@ tmp_all <- transform(tmp_1,'ID'=c(1:4896))
 write.table(tmp_all,file = "tmp_all.txt",sep = ",", quote = FALSE,row.names = FALSE)
 
 
-####  4. select streamflow data ####
+####  3.Select streamflow data ####
 library(dplyr)
 path <- "H:/Documents/paper3_water_china/runoff_china/database/data_table.xlsx"
 streamflow <- readxl::read_xlsx(path)
@@ -51,7 +30,8 @@ stfl_35 <- streamflow %>%
   mutate(date = as.Date(paste(year,month,day,sep="-"))) %>%
   select(date,discharge)
 write.csv(stfl_35,"q_obs_35.csv",row.names = FALSE)
-####  5.read weather gauge-based data   ####
+
+####  4.Read weather gauge-based data   ####
 library(data.table)
 library(readr)
 library(dplyr)
@@ -369,7 +349,8 @@ for (i in 1:length(unique(win$st_id))) {
   nam[[i]] <- paste("E:/Lexi/data_paper3/weather/gauge-based weather data China (1960-2020)/swat_weather/win/",txtfile[i],sep="")
   write.table(list_win[[i]][[3]],nam[[i]],row.names =FALSE,col.names = list_win[[i]][[2]][1],quote = FALSE)
 }
-####  6.matlab data          ####
+####  5.Foreign data  ####
+# matlab data
 library(R.matlab)
 library(dplyr)
 data_20 <- readMat("Data20.mat")
@@ -383,8 +364,39 @@ df_2 <- df_2 %>%
   select(date,discharge)
 write.csv(df_info,"Data2_info.csv")
 write.csv(df_2,"wu_river.csv",row.names = FALSE)
-####  7. web scraping  ######
-##/// down weekly report
+
+## reading .mdb file
+library(RODBC)
+con2 = odbcConnectAccess('D:/jingyVM/linjingy/min_river_sc/min_river_sc.mdb')
+sqltable = sqlTables(con2)
+hru = sqlFetch(con2,"hru")
+hru_90 = hru[,2:7]
+write.table(hru_90,"hru_lu_1990.txt",row.names = FALSE)
+odbcClose(con2)
+
+## reading .nc data
+library(ncdf4)
+library(raster)
+library(rasterVis)
+library(snow)
+files <- list.files(pattern=".nc",full.names = TRUE)#read nc.file
+china_coordinate <- read.csv("E:/Lexi/data_paper3/china_shp/china_point.csv",header = TRUE, sep = ",",stringsAsFactors = FALSE)
+nc <- stack(files)
+brick1 <- lapply(files,brick,varname ="runoff")#extract subsurface and surface runoff
+runf <- stack(brick1)
+brick2 <- lapply(files,brick,varname ="Snowf_tavg")
+snowf <- stack(brick2)
+coordinates(china_coordinate) <- ~lon +lat # extract value from point coordinated
+cn_runf <- extract(runf, china_coordinate)
+cn_snowf <- extract(snowf, china_coordinate)
+combine_cn_runf <- cbind(china_coordinate,cn_runf)# China_runoff <- China_sur + China_sub
+c_cn_runf <- as.data.frame(combine_cn_runf)
+df_cn_runf <- data.frame(t(c_cn_runf[,-1]))
+colnames(df_cn_runf) <- df_cn_runf[, 1]
+write.csv(df_runoff, file = "china_runoff_2015.csv")
+
+####  6.Web scraping  ######
+##/// download weekly report
 library(downloader)
 library(rvest)
 library(RSelenium)
@@ -446,10 +458,10 @@ library(dplyr)
 library(Rwebdriver)
 start_session(root = 'http://localhost/wd/hub/',browser ="chrome")# ???????????????4444,??????????????????chorme,????????????????????????firefox
 list_url <-  "http://106.37.208.243:8068/GJZ/Business/Publish/Main.html?nsukey=izcwxfBd9wvE6xZJmS9DC%2BOo7fv7ybS8nnsrmgK4cyMrp54jCB0NEXQBVjHOqwFgPrUPw2B8TL6b2mQbPLe4HWhy0yPx80Vj1mmfXMC4nBUa3naLxIrNOvCXjHO4a25yILUSi%2Fu7K%2F2QrmjBVN1DaQ9k1056DUZQRdPPYtpWzEWXHPpeZoHNvcoDS0EtEC6HodxX7A34wVTWuAOGl5kh9w%3D%3D"
-post.url(url = list_url)# ????????????
-pageSource <- page_source()#??????????????????
+post.url(url = list_url)
+pageSource <- page_source()
 
-####  8. water quality data ####
+####  7.Water quality data ####
 #/// read .docx data ///
 library(docxtractr)
 library(dplyr)
@@ -497,7 +509,7 @@ water <- water_quality%>%
 colnames(water)[c(2,7,8,9,10,11,12)]<- c("date","river_name","basin_name","ph","do","cod","nh3")
 
 
-####  9. geocoding  #### 
+####  8.Geocoding  #### 
 library(recharts)
 lat = map_location$lat
 lon = map_location$lon
@@ -507,7 +519,18 @@ df2 <- convBD2WGS(df)
 df3 = cbind(df2,address)
 readr::write_excel_csv(df3,"wwtps.xls")
 
-####  10. write point source daily ####
+
+#### 9.HRU Identify/threhold combination ####
+library(topHRU)
+hru_table = extract_hru("D:/jingyVM/linjingy/min_river_sc/min_river_sc.mdb")
+cols = c("LANDUSE","SOIL","SLP","UNIQUECOMB")
+hru_table[cols]=lapply(hru_table[cols],factor)
+hru_eval = evaluate_hru(hru_table=hru_table,luse_thrs = c(0,20,1),weight = c(2, 1, 1))
+hru_eval$result_nondominated
+plot_pareto(hru_eval, area_thrs = 0.05, hru_thrs = 2000,
+            interactive = TRUE)
+
+####  10.Write point source daily ####
 library(sf)
 point = foreign::read.dbf("point_select.dbf",as.is = TRUE)
 point_list = sort(point$POINTID[duplicated(point$POINTID)])
@@ -552,23 +575,8 @@ for (i in 1:length(list_modu)){
   options(max.print = max.print)
   options(width = 1000)
 }
-#
-library(topHRU)
-hru_table = extract_hru("D:/jingyVM/linjingy/min_river_sc/min_river_sc.mdb")
-cols = c("LANDUSE","SOIL","SLP","UNIQUECOMB")
-hru_table[cols]=lapply(hru_table[cols],factor)
-hru_eval = evaluate_hru(hru_table=hru_table,luse_thrs = c(0,20,1),weight = c(2, 1, 1))
-hru_eval$result_nondominated
-plot_pareto(hru_eval, area_thrs = 0.05, hru_thrs = 2000,
-            interactive = TRUE)
+#### 11.Write non-point source data####
 
-#
-library(RODBC)
-con2 = odbcConnectAccess('D:/jingyVM/linjingy/min_river_sc/min_river_sc.mdb')
-sqltable = sqlTables(con2)
-hru = sqlFetch(con2,"hru")
-hru_90 = hru[,2:7]
-write.table(hru_90,"hru_lu_1990.txt",row.names = FALSE)
-odbcClose(con2)
+
 
 
