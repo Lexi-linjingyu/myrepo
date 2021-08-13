@@ -367,9 +367,9 @@ write.csv(df_2,"wu_river.csv",row.names = FALSE)
 
 ## reading .mdb file
 library(RODBC)
-con2 = odbcConnectAccess('D:/jingyVM/linjingy/min_river_sc/min_river_sc.mdb')
+con2 = odbcConnectAccess('D:/jingyVM/linjingy/min_river/SWAT2012.mdb')
 sqltable = sqlTables(con2)
-hru = sqlFetch(con2,"hru")
+soil = sqlFetch(con2,"usersoil",as.is=TRUE)
 hru_90 = hru[,2:7]
 write.table(hru_90,"hru_lu_1990.txt",row.names = FALSE)
 odbcClose(con2)
@@ -395,6 +395,8 @@ df_cn_runf <- data.frame(t(c_cn_runf[,-1]))
 colnames(df_cn_runf) <- df_cn_runf[, 1]
 write.csv(df_runoff, file = "china_runoff_2015.csv")
 
+## read.dbf data
+other = foreign::read.dbf("D:/jingyVM/linjingy/others/1.dbf",as.is = TRUE)
 ####  6.Web scraping  ######
 ##/// download weekly report
 library(downloader)
@@ -522,10 +524,10 @@ readr::write_excel_csv(df3,"wwtps.xls")
 
 #### 9.HRU Identify/threhold combination ####
 library(topHRU)
-hru_table = extract_hru("D:/jingyVM/linjingy/min_river_sc/min_river_sc.mdb")
+hru_table = extract_hru("D:/jingyVM/linjingy/min_river/min_river.mdb")
 cols = c("LANDUSE","SOIL","SLP","UNIQUECOMB")
 hru_table[cols]=lapply(hru_table[cols],factor)
-hru_eval = evaluate_hru(hru_table=hru_table,luse_thrs = c(0,20,1),weight = c(2, 1, 1))
+hru_eval = evaluate_hru(hru_table=hru_table,luse_thrs = c(0,20,1),soil_thrs = c(0,20,1),weight = c(2, 1, 1))
 hru_eval$result_nondominated
 plot_pareto(hru_eval, area_thrs = 0.05, hru_thrs = 2000,
             interactive = TRUE)
@@ -575,8 +577,87 @@ for (i in 1:length(list_modu)){
   options(max.print = max.print)
   options(width = 1000)
 }
+
 #### 11.Write non-point source data####
+library(readr)
+library(rlist)
+library(dplyr)
+library(data.table)
+library(lubridate)
+library(RODBC)
+path = "D:/jingyVM/linjingy/min_river/Scenarios/Default/TxtInOut"
+list = list.files(path, pattern="\\.mgt$")
+file = lapply(list,function(x){
+  read_table2(x,col_names = FALSE)
+  }
+  )
+name = gsub(".mgt","",list)
+names(file) = paste(name)#rename list elements
+select_file = list()
+for (i in name){
+  if (file[[i]][["X7"]][1]== "Luse:AGRC"){
+    select_file[[i]] = print(i)
+  }
+}
+selection = paste(as.vector(unlist(select_file)),".mgt",sep = "")#select.mgt files which contains agriculture
+hrus <- read_table("D:/jingyVM/linjingy/min_river/Watershed/text/HRULandUseSoilsReport.txt",col_names = FALSE, skip = 180)
+hrus_sele = hrus[grep("(\\d+)",hrus$X1),]
+hrus_sele = hrus_sele[grep("(\\d+)",hrus_sele$X6),]
+hrus_agri = hrus_sele %>%
+  filter(X2 == "Agricultural")%>%
+  mutate(X1= as.integer(X1))%>%
+  select(X1:X7)
+con = odbcConnectAccess('D:/jingyVM/linjingy/min_river/min_river.mdb')
+sqltable = sqlTables(con)
+other = sqlFetch(con,"hrus",as.is =TRUE)
+odbcClose(con)
+join_agri = right_join(other,hrus_agri,by=c("HRU_ID"="X1"))
+fina_agri = join_agri[,c(12,2,6,8,13,19)]
+fina_agri = fina_agri%>%
+  mutate(HRU_ALL = HRU_GIS)
+fina_agri$HRU_GIS = as.numeric(stringr::str_sub(fina_agri$HRU_GIS, -2))
+fina_agri$HRU_ID = paste("HRU:",fina_agri$HRU_ID,sep = "")
+fina_agri$SUBBASIN = paste("Subbasin:",fina_agri$SUBBASIN,sep = "")
+fina_agri$SOIL = paste("Soil:",fina_agri$SOIL,sep = "")
+fina_agri$SLP = paste("Slope:",fina_agri$SLP,sep="")
+fina_agri$HRU_GIS = paste("HRU:",fina_agri$HRU_GIS,sep = "")
+start_time = seq(as.Date("2007/01/01"),by = "day",length.out = 4383)
+time = as.data.frame(start_time,ncol=1)
+join_time = merge(time,fina_agri)
+ferti = readxl::read_xlsx("H:/Documents/paper3_water_china/nitrogen sources/fertilizer_yearly_city.xlsx",range = "K1:L13")
+livestock = readxl::read_xlsx("H:/Documents/paper3_water_china/nitrogen sources/livestock_manure.xlsx",range = c("N602:O614"))
+names(ferti)[2] = paste("coef")
+names(livestock)[1:2] = paste(c("year","birds"))
+agri_time = join_time %>%
+  mutate(year = year(start_time),
+         month = month(start_time),
+         day = day(start_time))%>%
+  select(HRU_ID,X7,year,month,day,HRU_ALL)%>%
+  merge(ferti) %>%
+  mutate(fertilizer = coef * X7)%>%
+  merge(livestock) %>%
+  mutate(live_manure = birds * X7)%>%
+  filter(month == 1 & day == 1)
+agri_time$fertilizer = format(agri_time$fertilizer,digits = 8,justify = "right")
+agri_time$live_manure = as.integer(agri_time$live_manure,justify = "right")
+list_agri_time = split(agri_time,agri_time$HRU_ALL)
+k = readLines("000030005.mgt")
+middle = k[1:30]
+last_1 = list()
+last_2 = list()
+for (i in 1:length(list_agri_time)){
+  for (j in list_agri_time[[i]]["fertilizer"]){
+    last_1[i] = paste("  1  1           3    4",j,"  0",collapse ="\n",sep = " ")
+  }
+  header[i] = paste(" .mgt file Watershed",fina_agri$HRU_ID[i],fina_agri$SUBBASIN[i],fina_agri$HRU_GIS[i],"Luse:AGRC",fina_agri$SOIL[i],fina_agri$SLP[i],"7/29/2021 12:00:00 AM ArcSWAT 2012.10_4.21")
+  sink(selection[i])
+  cat(header[i])
+  writeLines(middle)
+  cat(last_1[[i]])
+  sink() 
+}
 
-
-
-
+for (k in list_agri_time[[i]]["live_manure"]){
+  last_2[i] = paste("  1  1          14",k,"47  0       0.0000",collapse = "\n",sep = " ")
+}
+writeLines(last_2[[i]])
