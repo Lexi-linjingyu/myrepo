@@ -499,8 +499,6 @@ df4.table[,9:11] <- lapply(
 
 dftable <- df5.table%>%
   mutate(s = V6+V7+V8-6)
-
-
 readr::write_excel_csv(df4.table,"water_quality.csv")
 water_quality <- read.csv("water_quality.csv",encoding = "UTF-8")
 d <- sort(unique(water_quality$V1))
@@ -509,7 +507,21 @@ d <- d[-3]
 water <- water_quality%>%
   filter(V1 %in% d)
 colnames(water)[c(2,7,8,9,10,11,12)]<- c("date","river_name","basin_name","ph","do","cod","nh3")
-
+## clean water quality
+quality = read.csv("~/Files/2020/paper 4/water quality/changed_row.csv")
+min_river_sc1 = quality %>%
+  filter(river_name == "min_river_sc")%>%
+  select(2,13)%>%
+  distinct()
+min_river_sc2 = quality %>%
+  filter(river_name == "min_river_sc2")%>%
+  select(2,13)%>%
+  distinct()
+min_river = left_join(min_river_sc1,min_river_sc2,by="column_name")
+min_river = tidyr::gather(min_river,"id","nh4",c(2,3))
+ggplot(min_river,aes(column_name,nh4,color=id))+
+  geom_point()
+readr::write_excel_csv(quality,"changed_row.csv",)
 
 ####  8.Geocoding  #### 
 library(recharts)
