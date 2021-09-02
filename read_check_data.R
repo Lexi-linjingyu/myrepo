@@ -467,6 +467,8 @@ pageSource <- page_source()
 #/// read .docx data ///
 library(docxtractr)
 library(dplyr)
+library(ggplot2)
+library(tidyr)
 path = "D:/jingyVM/linjingy/water quality"
 mypath = list.dirs(path, full.names = TRUE, recursive = TRUE)
 files = sort(unique(list.files(mypath,pattern = "\\.docx$", full.names = TRUE, recursive = TRUE)))
@@ -512,7 +514,14 @@ quality = read.csv("~/Files/2020/paper 4/water quality/changed_row.csv")
 min_river_sc1 = quality %>%
   filter(river_name == "min_river_sc")%>%
   select(2,13)%>%
-  distinct()
+  distinct()%>%
+  separate(column_name, into = c('year', 'week'), sep = 4)%>%
+  mutate(date=week)
+min_river_sc1$date = as.Date(paste(min_river_sc1$year, min_river_sc1$week, 1, sep=""), "%Y%U%u")
+min_river_sc1 = editData(min_river_sc1)
+min_river_sc.1 =min_river_sc1%>%
+  select(date,nh4)
+  
 min_river_sc2 = quality %>%
   filter(river_name == "min_river_sc2")%>%
   select(2,13)%>%
@@ -521,7 +530,7 @@ min_river = left_join(min_river_sc1,min_river_sc2,by="column_name")
 min_river = tidyr::gather(min_river,"id","nh4",c(2,3))
 ggplot(min_river,aes(column_name,nh4,color=id))+
   geom_point()
-readr::write_excel_csv(quality,"changed_row.csv",)
+readr::write_excel_csv(min_river_sc.1,"min_river_sc.1.csv",)
 
 ####  8.Geocoding  #### 
 library(recharts)
@@ -673,3 +682,8 @@ for (k in list_agri_time[[i]]["live_manure"]){
   last_2[i] = paste("  1  1          14",k,"47  0       0.0000",collapse = "\n",sep = " ")
 }
 writeLines(last_2[[i]])
+
+
+
+#####token 
+####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
