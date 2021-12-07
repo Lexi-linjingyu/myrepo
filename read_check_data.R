@@ -606,29 +606,31 @@ library(dplyr)
 library(data.table)
 library(lubridate)
 library(RODBC)
-path = "D:/jingyVM/linjingy/min_river/Scenarios/Default/TxtInOut"
+setwd("C:/project/paper3_water_china/model_database/min_test/Scenarios/Default/TxtInOut")
+path = "C:/project/paper3_water_china/model_database/min_test/Scenarios/Default/TxtInOut"
 list = list.files(path, pattern="\\.mgt$")
 file = lapply(list,function(x){
-  read_table2(x,col_names = FALSE)
+  read.table(x,fill = TRUE,quote = "")[-c(31,32,33,34,35,36),]
   }
   )
 name = gsub(".mgt","",list)
 names(file) = paste(name)#rename list elements
-select_file = list()
+select_file = c()
 for (i in name){
-  if (file[[i]][["X7"]][1]== "Luse:AGRC"){
-    select_file[[i]] = print(i)
+  if (file[[i]][["V7"]][1] == "Luse:AGRC" & file[[i]][["V9"]] != "Dunes"){
+    select_file[i] = print(i)
   }
 }
 selection = paste(as.vector(unlist(select_file)),".mgt",sep = "")#select.mgt files which contains agriculture
-hrus <- read_table("D:/jingyVM/linjingy/min_river/Watershed/text/HRULandUseSoilsReport.txt",col_names = FALSE, skip = 180)
+
+hrus <- read_table("C:/project/paper3_water_china/model_database/min_test/Watershed/text/HRULandUseSoilsReport.txt",col_names = FALSE, skip = 3)
 hrus_sele = hrus[grep("(\\d+)",hrus$X1),]
 hrus_sele = hrus_sele[grep("(\\d+)",hrus_sele$X6),]
 hrus_agri = hrus_sele %>%
   filter(X2 == "Agricultural")%>%
   mutate(X1= as.integer(X1))%>%
   select(X1:X7)
-con = odbcConnectAccess('D:/jingyVM/linjingy/min_river/min_river.mdb')
+con = odbcConnectAccess('C:/project/paper3_water_china/model_database/min_test/min_test.mdb')
 sqltable = sqlTables(con)
 other = sqlFetch(con,"hrus",as.is =TRUE)
 odbcClose(con)
@@ -645,45 +647,52 @@ fina_agri$HRU_GIS = paste("HRU:",fina_agri$HRU_GIS,sep = "")
 start_time = seq(as.Date("2007/01/01"),by = "day",length.out = 4383)
 time = as.data.frame(start_time,ncol=1)
 join_time = merge(time,fina_agri)
-ferti = readxl::read_xlsx("H:/Documents/paper3_water_china/nitrogen sources/fertilizer_yearly_city.xlsx",range = "K1:L13")
-livestock = readxl::read_xlsx("H:/Documents/paper3_water_china/nitrogen sources/livestock_manure.xlsx",range = c("N602:O614"))
+ferti = readxl::read_xlsx("C:/project/paper3_water_china/water quality/fertilizer_yearly_city.xlsx",range = "K1:L13")
+livestock = readxl::read_xlsx("C:/project/paper3_water_china/water quality/livestock_manure.xlsx",range = c("N602:O614"))
 names(ferti)[2] = paste("coef")
 names(livestock)[1:2] = paste(c("year","birds"))
+join_time$X7 = as.numeric(join_time$X7)
 agri_time = join_time %>%
   mutate(year = year(start_time),
          month = month(start_time),
          day = day(start_time))%>%
   select(HRU_ID,X7,year,month,day,HRU_ALL)%>%
-  merge(ferti) %>%
-  mutate(fertilizer = coef * X7)%>%
+  merge(ferti)%>%
+  mutate(fertilizer = coef)%>%
   merge(livestock) %>%
-  mutate(live_manure = birds * X7)%>%
-  filter(month == 1 & day == 1)
-agri_time$fertilizer = format(agri_time$fertilizer,digits = 8,justify = "right")
-agri_time$live_manure = as.integer(agri_time$live_manure,justify = "right")
-list_agri_time = split(agri_time,agri_time$HRU_ALL)
-k = readLines("000030005.mgt")
-middle = k[1:30]
+  mutate(live_manure = birds)%>%
+  merge(added) %>% 
+  filter(day == 1) %>% 
+  arrange(HRU_ID,year,match(month, c("1","2","3","4","5","6","7","8","9","10","11","12")))
+
+agri_time$fertilizer = format(agri_time$fertilizer,digits = 9)
+agri_time$live_manure = as.integer(agri_time$live_manure)
+list_agri_time = split(agri_time,list(agri_time$HRU_ALL,agri_time$year))
+
+## 
+
+
+file_full = lapply(selection,function(x){
+  readLines(x)[1:30]
+  }
+) 
+names(file_full) = paste(select_file)
+
 last_1 = list()
 last_2 = list()
+last_3 = paste0("              ",17)
 for (i in 1:length(list_agri_time)){
   for (j in list_agri_time[[i]]["fertilizer"]){
-    last_1[i] = paste("  1  1           3    4",j,"  0",collapse ="\n",sep = " ")
-  }
-  header[i] = paste(" .mgt file Watershed",fina_agri$HRU_ID[i],fina_agri$SUBBASIN[i],fina_agri$HRU_GIS[i],"Luse:AGRC",fina_agri$SOIL[i],fina_agri$SLP[i],"7/29/2021 12:00:00 AM ArcSWAT 2012.10_4.21")
-  sink(selection[i])
-  cat(header[i])
-  writeLines(middle)
-  cat(last_1[[i]])
-  sink() 
-}
-
-for (k in list_agri_time[[i]]["live_manure"]){
-  last_2[i] = paste("  1  1          14",k,"47  0       0.0000",collapse = "\n",sep = " ")
-}
-writeLines(last_2[[i]])
-
-
-
-#####token 
-####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
+    for (k in list_agri_time[[i]]["birds"]){
+        last_1[i] = paste(list_agri_time[[i]][["month"]],list_agri_time[[i]][["day"]][1:12]," 3     4",j,"  0",collapse ="\n",sep = " ")
+        last_2[i] = paste(list_agri_time[[i]][["month"]],list_agri_time[[i]][["day"]][1:12]," 14 ",k," 0       0.0000",collapse = "\n",sep = " ")
+      }
+    }
+    sink(selection[i])
+    writeLines(file_full[[i]])
+    while 
+    cat(last_1[[i]])
+    cat("\n")
+    cat(last_2[[i]])
+    sink() 
+    }
