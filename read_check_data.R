@@ -668,8 +668,9 @@ agri_time = join_time %>%
 agri_time$fertilizer = format(agri_time$fertilizer,digits = 9)
 agri_time$live_manure = as.integer(agri_time$live_manure)
 list_agri_time = split(agri_time,list(agri_time$HRU_ALL,agri_time$year))
-
-## 
+list_agri_time_y = lapply(list_agri_time,function(x) 
+  split(x,x[["year"]]))
+  ## 
 
 
 file_full = lapply(selection,function(x){
@@ -681,18 +682,20 @@ names(file_full) = paste(select_file)
 last_1 = list()
 last_2 = list()
 last_3 = paste0("              ",17)
-for (i in 1:length(list_agri_time)){
-  for (j in list_agri_time[[i]]["fertilizer"]){
-    for (k in list_agri_time[[i]]["birds"]){
-        last_1[i] = paste(list_agri_time[[i]][["month"]],list_agri_time[[i]][["day"]][1:12]," 3     4",j,"  0",collapse ="\n",sep = " ")
-        last_2[i] = paste(list_agri_time[[i]][["month"]],list_agri_time[[i]][["day"]][1:12]," 14 ",k," 0       0.0000",collapse = "\n",sep = " ")
+for (i in 1:length(list_agri_time_y)){
+  for (j in 1:length(list_agri_time_y[[i]]))
+    for (k in list_agri_time_y[[i]][[j]]["fertilizer"]){
+      for (f in list_agri_time_y[[i]][[j]]["birds"]){
+        last_1[[i]][[j]]= paste(list_agri_time_y[[i]][[j]][["month"]],list_agri_time_y[[i]][[j]][["day"]]," 3     4",k,"  0",collapse ="\n",sep = " ")
+        last_2[[i]][[j]]= paste(list_agri_time_y[[i]][[j]][["month"]],list_agri_time_y[[i]][[j]][["day"]]," 14 ",f," 0       0.0000",collapse = "\n",sep = " ")
       }
     }
     sink(selection[i])
     writeLines(file_full[[i]])
-    while 
-    cat(last_1[[i]])
+    cat(last_1[[i]][[j]])
     cat("\n")
-    cat(last_2[[i]])
+    cat(last_2[[i]][[j]])
+    cat("\n")
+    cat(last_3)
     sink() 
-    }
+}   
