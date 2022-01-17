@@ -545,7 +545,9 @@ readr::write_excel_csv(df3,"wwtps.xls")
 
 #### 9.HRU Identify/threhold combination ####
 library(topHRU)
-hru_table = extract_hru("D:/jingyVM/linjingy/min_river/min_river.mdb")
+library(RODBC)
+library(dplyr)
+hru_table = extract_hru("C:/project/paper3_water_china/model_database/min_test/min_test.mdb")
 cols = c("LANDUSE","SOIL","SLP","UNIQUECOMB")
 hru_table[cols]=lapply(hru_table[cols],factor)
 hru_eval = evaluate_hru(hru_table=hru_table,luse_thrs = c(0,20,1),soil_thrs = c(0,20,1),weight = c(2, 1, 1))
@@ -555,17 +557,18 @@ plot_pareto(hru_eval, area_thrs = 0.05, hru_thrs = 2000,
 
 ####  10.Write point source daily ####
 library(sf)
-point = foreign::read.dbf("point_select.dbf",as.is = TRUE)
-point_list = sort(point$POINTID[duplicated(point$POINTID)])
-point_list_r = unique(point[duplicated(point$POINTID),])
-point_inf = point_list_r[,c(13,23)]
-q_point = readxl::read_xlsx("H:/Documents/paper3_water_china/nitrogen sources/point sources.xlsx")
+library(dplyr)
+point = readxl::read_xls("C:/project/paper3_water_china/model_database/min_test/point_select.xls")
+point_list = sort(point$POINTID[duplicated(point$Subbasin)])
+point_list_r = unique(point[duplicated(point$Subbasin),])
+point_inf = point_list_r[,c(10,14)]
+q_point = readxl::read_xlsx("C:/project/paper3_water_china/model_database/min_test/point sources.xlsx")
 q_point_info = q_point[,c(1,2,13)]
 colnames(q_point_info)[1:3] = c("NAME_2","YEAR","NH3")
 join = merge(point_inf,q_point_info,by="NAME_2")
 join2 = join[,2:4]
 
-module = readr::read_table2("3p.dat",col_names = FALSE,skip = 1)
+module = readr::read_table2("C:/project/paper3_water_china/model_database/min_test/3p.dat",col_names = FALSE,skip = 1)
 colnames(module)=module[1,]
 module = as.data.frame(module[-1,])
 
@@ -573,6 +576,8 @@ join2[,2] = as.character(join2$YEAR)
 join2$NH3= format(as.numeric(join2$NH3),scientific = TRUE,digits = 11)
 join2$NH3 = gsub("e","E",join2$NH3)
 join_modu = left_join(module,join2,by="YEAR")
+
+
 join_modu2 = join_modu %>%
   select(-NH3CNST)%>%
   rename(NH3CNST=NH3)%>%
@@ -584,7 +589,6 @@ time = as.character(x= lubridate::now(),format='%m/%d/%Y %H:%M:%S')
 title = paste(time,"AM .dat file Daily Record Subbasin  10 ArcSWAT 2012.10_4.21 interface")
 max.print <- getOption('max.print')
 max.width <- getOption('width')
-options(width = 1000L)
 options(max.print=nrow(module)*ncol(module))
 point_name = sort(unique(join_modu2$Subbasin))
 txtname = paste(point_name,'p','.dat',sep="")
@@ -595,7 +599,7 @@ for (i in 1:length(list_modu)){
   cat("\n\n\n\n")
   print(list_modu[[i]],row.names = FALSE)
   sink()
-  options(max.print = max.print)
+  options(max.print = 10000000)
   options(width = 1000)
 }
 
@@ -652,50 +656,296 @@ livestock = readxl::read_xlsx("C:/project/paper3_water_china/water quality/lives
 names(ferti)[2] = paste("coef")
 names(livestock)[1:2] = paste(c("year","birds"))
 join_time$X7 = as.numeric(join_time$X7)
-agri_time = join_time %>%
+
+added = data.frame(series,code_f,code_f_u,code_l,code_l_s,code_l_id,code_p,code_p_c,constant,heat,na)
+
+agri_time_s = join_time %>%
   mutate(year = year(start_time),
          month = month(start_time),
          day = day(start_time))%>%
   select(HRU_ID,X7,year,month,day,HRU_ALL)%>%
+  filter(day == 1) 
+agri_time = agri_time_s %>% 
   merge(ferti)%>%
   mutate(fertilizer = coef)%>%
   merge(livestock) %>%
-  mutate(live_manure = birds)%>%
-  merge(added) %>% 
-  filter(day == 1) %>% 
+  merge(added) %>%
+  select(-series) %>% 
+  distinct() %>% 
   arrange(HRU_ID,year,match(month, c("1","2","3","4","5","6","7","8","9","10","11","12")))
 
 agri_time$fertilizer = format(agri_time$fertilizer,digits = 9)
-agri_time$live_manure = as.integer(agri_time$live_manure)
-list_agri_time = split(agri_time,list(agri_time$HRU_ALL,agri_time$year))
-list_agri_time_y = lapply(list_agri_time,function(x) 
-  split(x,x[["year"]]))
-  ## 
+agri_time$birds = format(round(as.numeric(agri_time$birds),4))
+
+df_plant = data.frame(agri_time$HRU_ALL,agri_time$year,agri_time$month,agri_time$code_p,agri_time$code_p_c,agri_time$na,
+                      agri_time$na,agri_time$heat,agri_time$constant,agri_time$constant,
+                      agri_time$constant,agri_time$constant,agri_time$constant)
+df_fert = data.frame(agri_time$HRU_ALL,agri_time$year,agri_time$month,agri_time$code_f,agri_time$code_f_u,agri_time$na,
+                     agri_time$na,agri_time$fertilizer,agri_time$constant,agri_time$na,
+                     agri_time$na,agri_time$na,agri_time$na)
+df_live = data.frame(agri_time$HRU_ALL,agri_time$year,agri_time$month,agri_time$code_l,agri_time$code_l_s,agri_time$code_l_id,
+                     agri_time$code_p,agri_time$birds,agri_time$na,agri_time$na,
+                     agri_time$na,agri_time$na,agri_time$na)
+df_end = unique(data.frame(agri_time$HRU_ALL,agri_time$year,agri_time$na,end,agri_time$na,agri_time$na,
+                    agri_time$na,agri_time$na,agri_time$na,agri_time$na,
+                    agri_time$na,agri_time$na,agri_time$na))
+colnames(df_fert) = colnames(df_plant)
+colnames(df_live) = colnames(df_plant)
+colnames(df_end) = colnames(df_plant)
+df = rbind(df_plant,df_fert,df_live,df_end)
+df = df %>% 
+  arrange(agri_time.HRU_ALL,agri_time.year,agri_time.code_p,match(agri_time.month, c("1","2","3","4","5","6","7","8","9","10","11","12")))
+df$id = 1:nrow(df)
+df = df %>% 
+  mutate(day = 1) %>%
+  mutate(day = ifelse(agri_time.code_p == 17,NA,day)) 
+df$agri_time.constant = format(round(df$agri_time.constant),nsmall=2)
+df$agri_time.constant.1 = format(round(df$agri_time.constant.1),nsmall=5)
+df$agri_time.constant.2 = format(round(df$agri_time.constant.2),nsmall=2)
+df$agri_time.constant.3 = format(round(df$agri_time.constant.3),nsmall=2)
+df$agri_time.constant.4 = format(round(df$agri_time.constant.4),nsmall=2)
+df$agri_time.heat = as.numeric(df$agri_time.heat)
+
+df$agri_time.constant = gsub("NA"," ",df$agri_time.constant)
+df$agri_time.constant.1 = gsub("NA"," ",df$agri_time.constant.1)
+df$agri_time.constant.2 = gsub("NA"," ",df$agri_time.constant.2)
+df$agri_time.constant.3 = gsub("NA"," ",df$agri_time.constant.3)
+df$agri_time.constant.4 = gsub("NA"," ",df$agri_time.constant.4)
 
 
+
+df.vec = df %>% 
+  select(1,14)
+df.vec.list = split(df.vec,df.vec$agri_time.HRU_ALL)
+
+###
+
+
+####__try 1: read .mgt that included agricultural hrus ####
 file_full = lapply(selection,function(x){
   readLines(x)[1:30]
   }
-) 
+)
+## change the rotation from 1 to 12
+for (i in 1:length(file_full)){
+  substr(file_full[[i]][[29]],15,16)="12"
+  substr(file_full[[i]][[4]],16,16)="1"
+}
+
+
 names(file_full) = paste(select_file)
 
-last_1 = list()
-last_2 = list()
-last_3 = paste0("              ",17)
-for (i in 1:length(list_agri_time_y)){
-  for (j in 1:length(list_agri_time_y[[i]]))
-    for (k in list_agri_time_y[[i]][[j]]["fertilizer"]){
-      for (f in list_agri_time_y[[i]][[j]]["birds"]){
-        last_1[[i]][[j]]= paste(list_agri_time_y[[i]][[j]][["month"]],list_agri_time_y[[i]][[j]][["day"]]," 3     4",k,"  0",collapse ="\n",sep = " ")
-        last_2[[i]][[j]]= paste(list_agri_time_y[[i]][[j]][["month"]],list_agri_time_y[[i]][[j]][["day"]]," 14 ",f," 0       0.0000",collapse = "\n",sep = " ")
-      }
-    }
+for (i in 1:length(df.vec.list)){
     sink(selection[i])
     writeLines(file_full[[i]])
-    cat(last_1[[i]][[j]])
-    cat("\n")
-    cat(last_2[[i]][[j]])
-    cat("\n")
-    cat(last_3)
+  for (j in df.vec.list[[i]][["id"]]) {
+    write.table(df[j,c(3,15,4:13)],row.names = FALSE,col.names = FALSE,quote = FALSE,na=" ",sep = "   ")
+  }
     sink() 
-}   
+  }
+closeAllConnections()
+
+####__try 2: real all .mgt ####
+library(tidyr)
+library(dplyr)
+library(stringr)
+library(lubridate)
+library(R.utils)
+library(gdata)
+
+hrus = HRULandUseSoilsReport
+hrus_all = hrus[grep("(\\d+)",hrus$X1),]
+hrus_all = hrus_all[!is.na(hrus_all$X6),]
+
+## clean data 
+X2 = hrus_all %>% 
+  filter(X2 == "-->") %>% 
+  mutate(XX1 = X1)
+X2$X1 = gsub("[[:digit:]]+","",X2$X1) ##extract number and replace with ""
+X2$XX1 = gsub("([0-9]+).*$", "\\1",X2$XX1) ##extract number
+X2 = X2 %>% 
+  select(XX1,X1:X10)
+colnames(X2)=paste("X",1:11,sep = "")
+
+X3 = hrus_all %>% 
+  filter(X3 !="-->" & X2 !="-->") %>% 
+  select(-(X4:X5)) %>% 
+  mutate(XX1 = "-->") %>% 
+  filter(X6 != "&" & X6 != 0) %>% 
+  filter(!is.na(X11)) %>% 
+  select(X1:X2,XX1,X3:X12)
+colnames(X3)=paste("X",1:11,sep = "")
+
+X3_1 = hrus_all %>% 
+  filter(X3 !="-->" & X2 !="-->") %>% 
+  select(-(X4:X5)) %>% 
+  mutate(XX1 = "-->") %>% 
+  filter(X6 != "&" & X6 != 0) %>% 
+  filter(is.na(X11)) %>% 
+  select(X1:X3,XX1,X12,X3:X11)
+colnames(X3_1)=paste("X",1:11,sep = "") 
+
+X4 = hrus_all %>% 
+  filter (X5 == "&") %>% 
+  select (-X5)
+colnames(X4)=paste("X",1:11,sep="")
+
+X5 = hrus_all %>% 
+  filter(X6 == "&") %>% 
+  select(-X6) %>% 
+  select(X1:X5,X8:X12,X7)
+colnames(X5)=paste("X",1:11,sep="")
+
+X6 = hrus_all %>% 
+  filter(is.na(X10)) %>% 
+  select(X1:X3,X11,X4:X10) %>% 
+  filter(X2 != "-->")
+colnames(X6)=paste("X",1:11,sep="")
+
+X7 = hrus_all %>% 
+  select(-X12) %>% 
+  filter(X6 != "&" & X5 != "&") %>% 
+  filter(X3 =="-->"|X2 !="-->") %>% 
+  filter(X4 != "-->") %>% 
+  filter(!is.na(X10)) %>% 
+  filter(!is.na(X11)) %>% 
+  select(-X5) %>% 
+  mutate(X12 = NA)
+colnames(X7)=paste("X",1:11,sep="")
+
+hrus_clean = hrus_all %>% 
+  select(-X12) %>% 
+  filter(X6 != "&" & X5 != "&") %>% 
+  filter(X3 =="-->"|X2 !="-->") %>% 
+  filter(X4 != "-->") %>% 
+  filter(!is.na(X10)) %>% 
+  filter(is.na(X11))
+
+X_all = rbind(X2,X3,X3_1,X4,X5,X6,X7,hrus_clean) %>% 
+  select(-X11)
+
+## join with other data 
+X_all$X1 = as.integer(X_all$X1)
+join_all = right_join(other,X_all,by=c("HRU_ID"="X1"))
+
+fina_all = join_all[,c(12,2,6,8,13,19)]
+fina_all = fina_all%>%
+  mutate(HRU_ALL = HRU_GIS)
+fina_all$HRU_GIS = as.numeric(stringr::str_sub(fina_all$HRU_GIS, -2))
+fina_all$HRU_ID = paste("HRU:",fina_all$HRU_ID,sep = "")
+fina_all$SUBBASIN = paste("Subbasin:",fina_all$SUBBASIN,sep = "")
+fina_all$SOIL = paste("Soil:",fina_all$SOIL,sep = "")
+fina_all$SLP = paste("Slope:",fina_all$SLP,sep="")
+fina_all$HRU_GIS = paste("HRU:",fina_all$HRU_GIS,sep = "")
+start_time = seq(as.Date("2007/01/01"),by = "day",length.out = 4383)
+time = as.data.frame(start_time,ncol=1)
+join_time_all = merge(time,fina_all)
+
+added = data.frame(series,code_f,code_f_u,code_l,code_l_s,code_l_id,code_p,code_p_c,constant,heat,na,code_p_1)
+all_time_s = join_time_all %>%
+  mutate(year = year(start_time),
+         month = month(start_time),
+         day = day(start_time))%>%
+  select(HRU_ID,X7,year,month,day,HRU_ALL)%>%
+  filter(day == 1) 
+all_time = all_time_s %>% 
+  merge(ferti)%>%
+  mutate(fertilizer = coef)%>%
+  merge(livestock) %>%
+  merge(added) %>%
+  select(-series) %>% 
+  distinct() %>% 
+  arrange(HRU_ID,year,match(month, c("1","2","3","4","5","6","7","8","9","10","11","12")))
+
+all_time$fertilizer = format(all_time$fertilizer,digits =9)
+all_time$birds = format(round(as.numeric(all_time$birds),4))
+
+df_plant = data.frame(all_time$HRU_ALL,all_time$year,all_time$month,all_time$code_p,all_time$code_p_c,all_time$na,
+                      all_time$na,all_time$heat,all_time$constant,all_time$constant,
+                      all_time$constant,all_time$constant,all_time$constant)
+df_fert = data.frame(all_time$HRU_ALL,all_time$year,all_time$month,all_time$code_f,all_time$code_f_u,all_time$na,
+                     all_time$na,all_time$coef,all_time$constant,all_time$na,
+                     all_time$na,all_time$na,all_time$na)
+df_live = data.frame(all_time$HRU_ALL,all_time$year,all_time$month,all_time$code_l,all_time$code_l_s,all_time$code_l_id,
+                     all_time$code_p_1,all_time$birds,all_time$na,all_time$na,
+                     all_time$na,all_time$na,all_time$na)
+df_end = unique(data.frame(all_time$HRU_ALL,all_time$year,all_time$na,end,all_time$na,all_time$na,
+                           all_time$na,all_time$na,all_time$na,all_time$na,
+                           all_time$na,all_time$na,all_time$na))
+colnames(df_fert) = colnames(df_plant)
+colnames(df_live) = colnames(df_plant)
+colnames(df_end) = colnames(df_plant)
+df_fert$all_time.heat = as.character(round(df_fert$all_time.heat,digits = 5))
+df = rbind(df_plant,df_live,df_end,df_fert)
+
+###!!!filter month < 10 to format
+df$hu = NA
+df$all_time.constant = format(round(df$all_time.constant),nsmall=2)
+
+
+###!!!notice to edit the month 
+df = df %>% 
+  arrange(all_time.HRU_ALL,all_time.year,all_time.code_p,match(all_time.month, c("1","2","3","4","5","6","7","8","9","10","11","12")))
+df$id = 1:nrow(df)
+df = df %>% 
+  mutate(day = 1) %>%
+  mutate(day = ifelse(all_time.code_p == 17,NA,day)) %>% 
+  mutate(all_time.constant_5 = ifelse(all_time.code_p==3,"0.20",all_time.constant)) %>% 
+  mutate(all_time.constant = all_time.constant_5) %>% 
+  select(-all_time.constant_5)
+
+df$all_time.constant.1 = format(round(df$all_time.constant.1),nsmall=5)
+df$all_time.constant.2 = format(round(df$all_time.constant.2),nsmall=2)
+df$all_time.constant.3 = format(round(df$all_time.constant.3),nsmall=2)
+df$all_time.constant.4 = format(round(df$all_time.constant.4),nsmall=2)
+
+df$all_time.constant = gsub("NA"," ",df$all_time.constant)
+df$all_time.constant.1 = gsub("NA"," ",df$all_time.constant.1)
+df$all_time.constant.2 = gsub("NA"," ",df$all_time.constant.2)
+df$all_time.constant.3 = gsub("NA"," ",df$all_time.constant.3)
+df$all_time.constant.4 = gsub("NA"," ",df$all_time.constant.4)
+
+##select plant
+df_2 = df %>% 
+  filter(all_time.code_p == 17 | all_time.code_p == " 1") %>% 
+  filter(all_time.month <= 9 | is.na(all_time.month))
+df_2$id = 1:nrow(df_2)
+
+
+##
+df.vec.all = df_2 %>% 
+  select(1,15)
+df.all.list = split(df.vec.all,df.vec.all$all_time.HRU_ALL)
+
+##file_full_all = lapply(list,function(x){
+##  readLines(x)[1:30]
+##})
+##for (i in 1:length(file_full_all)){
+##  substr(file_full_all[[i]][[29]],15,16)="12"
+##}
+
+##names(file_full_all) = paste(name)
+
+
+
+for (i in 1:length(df.all.list)){
+  sink(list[i])
+  writeLines(file_full_all[[i]])
+  for (j in df.all.list[[i]][["id"]]) {
+    write.fwf(df_2[j,c(3,16,14,4:13)],row.names = FALSE,col.names = FALSE,quote = FALSE,na=" ",sep = " ")
+  }
+  sink() 
+}
+
+## other methods
+
+
+
+## copy file from workplace to other folder
+dir = getwd()
+dir = setwd("C:/project/paper3_water_china/model_database/min_test/Scenarios/Default/TxtInOut")
+list.of.files = list.files(dir,pattern="\\.mgt$")
+
+file.copy(list.of.files,"C:/project/update",overwrite = TRUE)
+#file.remove(list.of.files)
+
