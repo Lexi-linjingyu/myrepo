@@ -547,46 +547,61 @@ readr::write_excel_csv(df3,"wwtps.xls")
 library(topHRU)
 library(RODBC)
 library(dplyr)
-hru_table = extract_hru("C:/project/paper3_water_china/model_database/min_test/min_test.mdb")
+hru_table = extract_hru("C:/project/paper3_water_china/model_database/yangtze_river/yangtze_river.mdb")
 cols = c("LANDUSE","SOIL","SLP","UNIQUECOMB")
 hru_table[cols]=lapply(hru_table[cols],factor)
-hru_eval = evaluate_hru(hru_table=hru_table,luse_thrs = c(0,20,1),soil_thrs = c(0,20,1),weight = c(2, 1, 1))
+hru_eval = evaluate_hru(hru_table=hru_table,luse_thrs = c(0,20,1),
+                        soil_thrs = c(0,20,1),slp_thrs = c(0,20,1),
+                        weight = c(2, 1, 1))
 hru_eval$result_nondominated
 plot_pareto(hru_eval, area_thrs = 0.05, hru_thrs = 2000,
             interactive = TRUE)
 
-####  10.Write point source daily ####
+####  10.Write point source yearly ####
 library(sf)
 library(dplyr)
-point = readxl::read_xls("C:/project/paper3_water_china/model_database/min_test/point_select.xls")
-point_list = sort(point$POINTID[duplicated(point$Subbasin)])
-point_list_r = unique(point[duplicated(point$Subbasin),])
-point_inf = point_list_r[,c(10,14)]
-q_point = readxl::read_xlsx("C:/project/paper3_water_china/model_database/min_test/point sources.xlsx")
+library(readr)
+wwtp_n = read_csv(
+  "C:/project/paper3_water_china/water quality/PoiS_select/min_wwtpNum.txt")
+wwtp_n = wwtp_n %>% 
+  select(Join_Count,Subbasin) %>% 
+  dplyr::rename(num = Join_Count)
+point = readxl::read_xls(
+  "C:/project/paper3_water_china/water quality/PoiS_select/Min_poicity.xls")
+point_list = point %>% 
+  filter(duplicated(Subbasin))
+point_inf = point_list[,c(12,16)] %>% 
+  left_join(.,wwtp_n,by = "Subbasin")
+
+q_point = readxl::read_xlsx(
+  "C:/project/paper3_water_china/water quality/PoiS_select/point sources_new.xlsx")
 q_point_info = q_point[,c(1,2,13)]
 colnames(q_point_info)[1:3] = c("NAME_2","YEAR","NH3")
-join = merge(point_inf,q_point_info,by="NAME_2")
+join = merge(point_inf,q_point_info,by="NAME_2") %>% 
+  mutate(NH3_KG = NH3*num) %>% 
+  select(-"NH3",-"num")
 join2 = join[,2:4]
 
-module = readr::read_table2("C:/project/paper3_water_china/model_database/min_test/3p.dat",col_names = FALSE,skip = 1)
+module = read_table(
+  "C:/project/paper3_water_china/water quality/PoiS_select/pointYear.dat",
+  col_names = FALSE,skip = 1)
 colnames(module)=module[1,]
 module = as.data.frame(module[-1,])
 
 join2[,2] = as.character(join2$YEAR)
-join2$NH3= format(as.numeric(join2$NH3),scientific = TRUE,digits = 11)
-join2$NH3 = gsub("e","E",join2$NH3)
-join_modu = left_join(module,join2,by="YEAR")
-
+join2$NH3_KG= format(as.numeric(join2$NH3_KG),scientific = TRUE,digits = 4)
+join2$NH3_KG = gsub("e","E",join2$NH3_KG)
+join_modu = full_join(module,join2,by="YEAR")
 
 join_modu2 = join_modu %>%
-  select(-NH3CNST)%>%
-  rename(NH3CNST=NH3)%>%
-  relocate(NH3CNST,.after = NO3CNST)
+  select(-"NH3YR")%>%
+  dplyr::rename(NH3YR=NH3_KG)%>%
+  relocate(NH3YR,.after = NO3YR)
 list_modu = split(join_modu2[-which(names(join_modu2)=="Subbasin")],f=join_modu2$Subbasin)
 
 #write.table(module,quote=FALSE,row.names=FALSE)
 time = as.character(x= lubridate::now(),format='%m/%d/%Y %H:%M:%S')
-title = paste(time,"AM .dat file Daily Record Subbasin  10 ArcSWAT 2012.10_4.21 interface")
+title = paste(time,"AM .dat file Yearly Record Subbasin  10 ArcSWAT 2012.10_4.21 interface")
 max.print <- getOption('max.print')
 max.width <- getOption('width')
 options(max.print=nrow(module)*ncol(module))
@@ -842,7 +857,7 @@ start_time = seq(as.Date("2007/01/01"),by = "month",length.out = 144)
 time = as.data.frame(start_time,ncol=1)
 join_time_all = merge(time,fina_all)
 
-added = data.frame(series,code_f,code_f_u,code_l,code_l_s,code_l_id,code_p,code_p_c,constant,heat,na,code_p_1,code_f_f)
+added = data.frame(series,code_f,code_f_u,code_l,code_l_s,code_l_id,code_p,code_p_c,constant,heat,na,code_p_1,code_f_f,code_p_c_1)
 all_time_s = join_time_all %>%
   mutate(year = year(start_time),
          month = month(start_time),
@@ -851,7 +866,7 @@ all_time_s = join_time_all %>%
 all_time = all_time_s %>% 
   merge(ferti)%>%
   mutate(fertilizer = coef) %>% 
-  merge(livestock) %>%  
+  merge(livestock) %>% 
   merge(added) %>%   
   select(-series) %>% 
   distinct() %>% 
@@ -928,12 +943,12 @@ df$all_time.constant.2 = gsub("NA","",df$all_time.constant.2)
 df$all_time.constant.3 = gsub("NA","",df$all_time.constant.3)
 df$all_time.code_p = gsub("NA","",df$all_time.code_p)
 df$all_time.code_p_c = gsub("NA"," ",df$all_time.code_p_c)##
-df$all_time.month = gsub("NA"," ",df$all_time.month)##
+df$all_time.month = gsub("NA","  ",df$all_time.month)##
 df$all_time.heat = gsub("NA","",df$all_time.heat)
-df$day = gsub("NA"," ",df$day)##
+df$day = gsub("NA","  ",df$day)##
 df$hu = gsub("NA","",df$hu)
-df$all_time.na = gsub("NA","", df$all_time.na)
-df$all_time.na.1 = gsub("NA","",df$all_time.na.1)
+df$all_time.na = gsub("NA","  ", df$all_time.na)##
+df$all_time.na.1 = gsub("NA"," ",df$all_time.na.1)
 df$all_time.code_f = gsub("NA","",df$all_time.code_f)
 
 
@@ -960,11 +975,11 @@ for (i in 1:length(df.all.list)){
   writeLines(file_full_all[[i]])
   for (j in df.all.list[[i]][["id"]]) {
       write.fwf(df[j,c(14, 3,15,14,14,14,14,14,14,14,
-                       14,14, 4,14, 5,14, 6, 7,14,14,
-                       8,14,
+                       14,14, 4,14, 5,14,14, 6, 7,14,
+                       14, 8,14,
                        14, 9,14,14,14,14,11,12,14,14,12,
                        14,13)],
-                quote=F,rownames = F,colnames = F,na="",sep = " ")
+                       quote = F,rownames = F,colnames = F,na="",sep = " ")
   }
   setTxtProgressBar(pb,i/length(df.all.list))
   sink() 
@@ -973,6 +988,32 @@ end_time = Sys.time()
 close(pb)
 run_time = end_time - start_time
 
+dir = getwd()
+list.of.files = list.files(dir,pattern="\\.mgt$")
+mgt_file = lapply(list.of.files,function(x){
+  readLines(x)
+})
+for (i in 1:length(mgt_file)){
+  substr(mgt_file[[i]][33],1,44)= "  1  1          14  365  47  1       7.8639                           "
+  substr(mgt_file[[i]][37],1,44)= "  1  1          14  365  47  1       7.4450                           "
+  substr(mgt_file[[i]][41],1,44)= "  1  1          14  365  47  1       8.0013                           "
+  substr(mgt_file[[i]][45],1,44)= "  1  1          14  365  47  1       7.9958                           "
+  substr(mgt_file[[i]][49],1,44)= "  1  1          14  365  47  1       7.9267                           "
+  substr(mgt_file[[i]][53],1,44)= "  1  1          14  365  47  1       7.9332                           "
+  substr(mgt_file[[i]][57],1,44)= "  1  1          14  365  47  1       8.0325                           "
+  substr(mgt_file[[i]][61],1,44)= "  1  1          14  365  47  1       8.2721                           "
+  substr(mgt_file[[i]][65],1,44)= "  1  1          14  365  47  1       8.3765                           "
+  substr(mgt_file[[i]][69],1,44)= "  1  1          14  365  47  1       8.3490                           "
+  substr(mgt_file[[i]][73],1,44)= "  1  1          14  365  47  1       7.6665                           "
+  substr(mgt_file[[i]][77],1,44)= "  1  1          14  365  47  1       3.5097                           "
+}
+
+names(mgt_file) = paste(name)
+for (i in 1:length(df.all.list)){
+  sink(list[i])
+  writeLines(mgt_file[[i]])
+  sink()
+}
 ## other methods
 
 
@@ -985,6 +1026,4 @@ list.of.files = list.files(dir,pattern="\\.mgt$")
 file.copy(list.of.files,"C:/project/update",overwrite = TRUE)
 file.remove(list.of.files)
 
-mgt_file = lapply(list.of.files,function(x){
-  readLines(x)
-})
+
