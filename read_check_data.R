@@ -547,14 +547,15 @@ readr::write_excel_csv(df3,"wwtps.xls")
 library(topHRU)
 library(RODBC)
 library(dplyr)
-hru_table = extract_hru("C:/project/paper3_water_china/model_database/yangtze_river/yangtze_river.mdb")
+# hru_table = extract_hru("yangtze_river.mdb")
+hru_table = readxl::read_xlsx("hrus.xlsx")
 cols = c("LANDUSE","SOIL","SLP","UNIQUECOMB")
 hru_table[cols]=lapply(hru_table[cols],factor)
 hru_eval = evaluate_hru(hru_table=hru_table,luse_thrs = c(0,20,1),
                         soil_thrs = c(0,20,1),slp_thrs = c(0,20,1),
-                        weight = c(2, 1, 1))
+                        weight = c(2,1,1))
 hru_eval$result_nondominated
-plot_pareto(hru_eval, area_thrs = 0.05, hru_thrs = 2000,
+plot_pareto(hru_eval, area_thrs = 0.5, hru_thrs = 2200,
             interactive = TRUE)
 
 ####  10.Write point source yearly ####
@@ -1026,4 +1027,32 @@ list.of.files = list.files(dir,pattern="\\.mgt$")
 file.copy(list.of.files,"C:/project/update",overwrite = TRUE)
 file.remove(list.of.files)
 
+####12.SWAT-CUP input files ####
+library(lubridate)
+library(tidyr)
+library(dplyr)
+
+list = list.files(pattern = "(^[Yangtze_W1]+)")
+list = list[c(1:3,5,7:9,11,12,14,15)]
+flow_df <- lapply(list,function(x) {
+  read.csv(x,col.names = c("Date","Flow"))
+})
+names(flow_df) = list
+df_all = reshape2::melt(flow_df)
+df_all_paste = df_all %>% 
+  filter(Date <= "2008-12-31") %>% 
+  pivot_wider(names_from = L1,values_from = value) %>% 
+  pivot_longer(3:13,names_to = "L1", values_to = 'value') %>% 
+  mutate(year = year(Date),
+         month = month(Date),
+         day = day(Date)) %>% 
+  group_by(L1,month,day)  %>% 
+  mutate(value = ifelse(is.na(value),
+                        mean(value,na.rm = TRUE),value)) %>% 
+  pivot_wider(names_from = L1,values_from = value) %>% 
+  ungroup() %>% 
+  mutate(id = paste(seq(1,nrow(.)))) %>% 
+  mutate(all = paste("FLOW_OUT",day,year,sep = "_")) %>% 
+  select(id,all,6:16)
+write.csv(df_all_paste,row.names = FALSE,"paste.csv")
 
