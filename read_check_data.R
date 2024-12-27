@@ -547,62 +547,46 @@ readr::write_excel_csv(df3,"wwtps.xls")
 library(topHRU)
 library(RODBC)
 library(dplyr)
-# hru_table = extract_hru("yangtze_river.mdb")
-hru_table = readxl::read_xlsx("hrus.xlsx")
+hru_table = extract_hru("C:/project/paper3_water_china/model_database/min_test/min_test.mdb")
 cols = c("LANDUSE","SOIL","SLP","UNIQUECOMB")
 hru_table[cols]=lapply(hru_table[cols],factor)
-hru_eval = evaluate_hru(hru_table=hru_table,luse_thrs = c(0,20,1),
-                        soil_thrs = c(0,20,1),slp_thrs = c(0,20,1),
-                        weight = c(2,1,1))
+hru_eval = evaluate_hru(hru_table=hru_table,luse_thrs = c(0,20,1),soil_thrs = c(0,20,1),weight = c(2, 1, 1))
 hru_eval$result_nondominated
-plot_pareto(hru_eval, area_thrs = 0.5, hru_thrs = 2200,
+plot_pareto(hru_eval, area_thrs = 0.05, hru_thrs = 2000,
             interactive = TRUE)
 
-####  10.Write point source yearly ####
+####  10.Write point source daily ####
 library(sf)
 library(dplyr)
-library(readr)
-wwtp_n = read_csv(
-  "C:/project/paper3_water_china/water quality/PoiS_select/min_wwtpNum.txt")
-wwtp_n = wwtp_n %>% 
-  select(Join_Count,Subbasin) %>% 
-  dplyr::rename(num = Join_Count)
-point = readxl::read_xls(
-  "C:/project/paper3_water_china/water quality/PoiS_select/Min_poicity.xls")
-point_list = point %>% 
-  filter(duplicated(Subbasin))
-point_inf = point_list[,c(12,16)] %>% 
-  left_join(.,wwtp_n,by = "Subbasin")
-
-q_point = readxl::read_xlsx(
-  "C:/project/paper3_water_china/water quality/PoiS_select/point sources_new.xlsx")
+point = readxl::read_xls("C:/project/paper3_water_china/model_database/min_test/point_select.xls")
+point_list = sort(point$POINTID[duplicated(point$Subbasin)])
+point_list_r = unique(point[duplicated(point$Subbasin),])
+point_inf = point_list_r[,c(10,14)]
+q_point = readxl::read_xlsx("C:/project/paper3_water_china/model_database/min_test/point sources.xlsx")
 q_point_info = q_point[,c(1,2,13)]
 colnames(q_point_info)[1:3] = c("NAME_2","YEAR","NH3")
-join = merge(point_inf,q_point_info,by="NAME_2") %>% 
-  mutate(NH3_KG = NH3*num) %>% 
-  select(-"NH3",-"num")
+join = merge(point_inf,q_point_info,by="NAME_2")
 join2 = join[,2:4]
 
-module = read_table(
-  "C:/project/paper3_water_china/water quality/PoiS_select/pointYear.dat",
-  col_names = FALSE,skip = 1)
+module = readr::read_table2("C:/project/paper3_water_china/model_database/min_test/3p.dat",col_names = FALSE,skip = 1)
 colnames(module)=module[1,]
 module = as.data.frame(module[-1,])
 
 join2[,2] = as.character(join2$YEAR)
-join2$NH3_KG= format(as.numeric(join2$NH3_KG),scientific = TRUE,digits = 4)
-join2$NH3_KG = gsub("e","E",join2$NH3_KG)
-join_modu = full_join(module,join2,by="YEAR")
+join2$NH3= format(as.numeric(join2$NH3),scientific = TRUE,digits = 11)
+join2$NH3 = gsub("e","E",join2$NH3)
+join_modu = left_join(module,join2,by="YEAR")
+
 
 join_modu2 = join_modu %>%
-  select(-"NH3YR")%>%
-  dplyr::rename(NH3YR=NH3_KG)%>%
-  relocate(NH3YR,.after = NO3YR)
+  select(-NH3CNST)%>%
+  rename(NH3CNST=NH3)%>%
+  relocate(NH3CNST,.after = NO3CNST)
 list_modu = split(join_modu2[-which(names(join_modu2)=="Subbasin")],f=join_modu2$Subbasin)
 
 #write.table(module,quote=FALSE,row.names=FALSE)
 time = as.character(x= lubridate::now(),format='%m/%d/%Y %H:%M:%S')
-title = paste(time,"AM .dat file Yearly Record Subbasin  10 ArcSWAT 2012.10_4.21 interface")
+title = paste(time,"AM .dat file Daily Record Subbasin  10 ArcSWAT 2012.10_4.21 interface")
 max.print <- getOption('max.print')
 max.width <- getOption('width')
 options(max.print=nrow(module)*ncol(module))
@@ -967,7 +951,7 @@ for (i in 1:length(file_full_all)){
 
 names(file_full_all) = paste(name)
 
-setwd("C:/project/myrepo/myrepo")
+setwd("F:/Lexi/myrepo_1")
 pb = txtProgressBar(style=3) ## present progress bar
 start_time = Sys.time()
 
@@ -1027,32 +1011,36 @@ list.of.files = list.files(dir,pattern="\\.mgt$")
 file.copy(list.of.files,"C:/project/update",overwrite = TRUE)
 file.remove(list.of.files)
 
-####12.SWAT-CUP input files ####
-library(lubridate)
-library(tidyr)
-library(dplyr)
+####__try 3: ####
+yangtze_subs_adm <- read.csv("F:/wangjinz/lexi/others/yangtze_subs_adm.txt")
+yangtze_subs_adm = yangtze_subs_adm[order(yangtze_subs_adm$Area,
+                                          decreasing = TRUE),]
+yangtze_subs_adm_undup = yangtze_subs_adm[!duplicated(yangtze_subs_adm$Subbasin),]
+subs_adm = yangtze_subs_adm_undup %>% 
+  select(Subbasin,ADM1_EN) 
+write.csv(subs_adm,"subs_adm.csv")
 
-list = list.files(pattern = "(^[Yangtze_W1]+)")
-list = list[c(1:3,5,7:9,11,12,14,15)]
-flow_df <- lapply(list,function(x) {
-  read.csv(x,col.names = c("Date","Flow"))
-})
-names(flow_df) = list
-df_all = reshape2::melt(flow_df)
-df_all_paste = df_all %>% 
-  filter(Date <= "2008-12-31") %>% 
-  pivot_wider(names_from = L1,values_from = value) %>% 
-  pivot_longer(3:13,names_to = "L1", values_to = 'value') %>% 
-  mutate(year = year(Date),
-         month = month(Date),
-         day = day(Date)) %>% 
-  group_by(L1,month,day)  %>% 
-  mutate(value = ifelse(is.na(value),
-                        mean(value,na.rm = TRUE),value)) %>% 
-  pivot_wider(names_from = L1,values_from = value) %>% 
-  ungroup() %>% 
-  mutate(id = paste(seq(1,nrow(.)))) %>% 
-  mutate(all = paste("FLOW_OUT",day,year,sep = "_")) %>% 
-  select(id,all,6:16)
-write.csv(df_all_paste,row.names = FALSE,"paste.csv")
+## for livestock ##
+livestock_manure <- read_excel("H:/water quality/NonPoiS/livestock_manure.xlsx")
+names(livestock_manure)[c(1,3,8)] = c("ID","year","poultry_1")
+livestock <- livestock_manure %>% 
+  select(1,3,4,5:8,16) %>%
+  mutate(swine = piggy*10000*4.6/area) %>% 
+  mutate(cattle = cattle...6 * 10000*238/area) %>% 
+  mutate(goat = goat...7 * 10000*1243.8/area) %>% 
+  mutate(poultry = poultry_1 *10000*1.38/area) %>% 
+  mutate(across(c(swine,cattle,goat,poultry),round,2)) %>% 
+  select(1:2,9:12) %>% 
+  group_by(ID,year) %>% 
+  summarise_each(mean) %>% 
+  group_by(ID) %>% 
+  summarise_each(funs(round(mean(.,na.rm = TRUE),1)))
+write.csv(livestock,"livestock.csv")
 
+fertilizer_yearly_provin <- read_excel("H:/water quality/NonPoiS/fertilizer_yearly_provin.xls")
+names(fertilizer_yearly_provin)[c(1,2,8)] = c("ID","year","value")
+fertilizer <- fertilizer_yearly_provin %>% 
+  select(1,2,8) %>% 
+  group_by(ID) %>% 
+  summarise_each(funs(round(mean(.,na.rm = TRUE),1)))
+readr::write_excel_csv(fertilizer,"fertilizer.csv") 
